@@ -1,0 +1,127 @@
+---
+title: "PIN expiry"
+description: "Configure how long device PIN verification lasts"
+---
+
+By default, once a device verifies its PIN it stays verified permanently. You can change this so verification expires after a set number of hours, requiring the user to go through the flow again.
+
+## Expiry modes
+
+There are two modes, configured per API key in the admin panel under **PIN configuration**:
+
+| Mode | `expiresAt` on `UserPin` | Behavior |
+|---|---|---|
+| `never` | `null` | Device stays verified permanently |
+| `duration` | `now + expiryHours` | Re-verification required after N hours |
+
+The default mode is `never`. The default `expiryHours` value is `24`.
+
+## How expiry is checked
+
+Expiry is evaluated on every `POST /api/sdk/init` call — not on a schedule. The server calls `isDeviceVerified()` each time the SDK initializes:
+
+```typescript
+// sdk.service.ts — isDeviceVerified()
+const verifiedPin = await prisma.userPin.findFirst({
+  where: { apiKeyId, deviceId, isUsed: true },
+  orderBy: { usedAt: 'desc' },
+});
+
+if (!verifiedPin) return false;
+
+// Never expires
+if (!config || config.expiryMode === 'never') return true;
+
+// Check if PIN has expired
+if (verifiedPin.expiresAt && new Date() > verifiedPin.expiresAt) {
+  await prisma.userPin.delete({ where: { id: verifiedPin.id } });
+  return false;
+}
+
+return true;
+```
+
+When a PIN has passed its `expiresAt` timestamp:
+
+1. The `UserPin` record is **deleted** from the database.
+2. `isDeviceVerified()` returns `false`.
+3. The init response includes `pinVerified: false`.
+4. The SDK shows `PinVerifyDialog` again — the user must complete the flow.
+
+## Setting expiry on verification
+
+When the user successfully verifies their PIN, the server calculates and stores `expiresAt` based on the current `expiryMode`:
+
+```typescript
+// sdk.service.ts — verifyPin()
+const expiresAt = config.expiryMode === 'duration'
+  ? new Date(Date.now() + config.expiryHours * 60 * 60 * 1000)
+  : null;
+
+await prisma.userPin.update({
+  where: { id: userPin.id },
+  data: { isUsed: true, usedAt: new Date(), expiresAt },
+});
+```
+
+`expiresAt: null` means the verification never expires. A timestamp means it will be invalidated on the next init call after that time passes.
+
+## UserPin schema fields
+
+The relevant fields on the `UserPin` model:
+
+```prisma
+model UserPin {
+  id        Int       @id @default(autoincrement())
+  apiKeyId  Int
+  deviceId  String
+  pin       String
+  isUsed    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?                    // set when PIN is first verified
+  expiresAt DateTime?                    // null = never expires, timestamp = expiry time
+}
+```
+
+## PinConfig schema fields
+
+Expiry is configured in `PinConfig`:
+
+```prisma
+model PinConfig {
+  expiryMode  String @default("never")  // "never" | "duration"
+  expiryHours Int    @default(24)        // hours until PIN expires (duration mode only)
+}
+```
+
+## Admin panel configuration
+
+In the admin panel, open **PIN configuration** for your API key and set:
+
+- **Expiry mode** — choose `never` or `duration`.
+- **Expiry hours** — the number of hours before the PIN expires (only relevant in `duration` mode).
+
+Changes take effect on the next `POST /api/sdk/init` call from any device.
+
+<Note>
+  Changing the expiry mode does not retroactively expire already-verified devices. Existing `UserPin` records with `expiresAt: null` (set under `never` mode) are not touched. Only new verifications pick up the new mode.
+</Note>
+
+## Global unlock mode interaction
+
+The server also supports a global unlock mode (`pinUnlockMode`) in `GlobalSettings`. When set to `global`, a device verified on any app is treated as verified on all apps. Expiry is still respected — the server checks `expiresAt` against the PIN's own `PinConfig`:
+
+```typescript
+// sdk.service.ts — isDeviceVerifiedGlobally()
+const config = verifiedPin.apiKey?.pinConfig;
+if (!config || config.expiryMode === 'never') return true;
+
+if (verifiedPin.expiresAt && new Date() > verifiedPin.expiresAt) {
+  await prisma.userPin.delete({ where: { id: verifiedPin.id } });
+  return false;
+}
+```
+
+<Info>
+  Under `global_except` mode, apps listed in `excludedAppIds` use their own `PinConfig` expiry. All other apps share the global verification state.
+</Info>

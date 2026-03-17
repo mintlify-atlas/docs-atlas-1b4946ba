@@ -1,0 +1,102 @@
+---
+title: "Installation"
+description: "Add AdVerify SDK to your Android project"
+---
+
+AdVerify SDK is a zero-dependency Android library that handles ad display and PIN-based device verification. It ships as a prebuilt AAR file that you drop into any Android project.
+
+## Requirements
+
+<CardGroup cols={2}>
+  <Card title="Android API 21+" icon="mobile">
+    Minimum SDK version 21 (Android 5.0 Lollipop). The SDK uses `Canvas`, `Paint`, and `HttpURLConnection` — all available since API 21.
+  </Card>
+  <Card title="Java" icon="code">
+    Written in pure Java. Compatible with Java 8+ source compatibility. No Kotlin runtime required.
+  </Card>
+  <Card title="No external dependencies" icon="package">
+    Zero third-party libraries. All networking uses `HttpURLConnection`, all UI is drawn with Android's built-in `Canvas` and `GradientDrawable` APIs.
+  </Card>
+  <Card title="INTERNET permission" icon="wifi">
+    The SDK communicates with your ad server. The `INTERNET` permission must be declared in `AndroidManifest.xml`.
+  </Card>
+</CardGroup>
+
+## Integration methods
+
+Choose the method that matches your workflow:
+
+<CardGroup cols={2}>
+  <Card title="Android Studio" href="/sdk/android-studio">
+    Add the AAR to your Gradle project. Best for apps you build from source. Supports the full callback API and Application-class initialization.
+  </Card>
+  <Card title="MT Manager" href="/sdk/mt-manager">
+    Inject the SDK into an existing APK using smali patching. No source code required. Use the prebuilt DEX file and a three-line smali hook.
+  </Card>
+</CardGroup>
+
+## AAR file setup
+
+Both integration methods are based on the same prebuilt artifact. The AAR bundles all compiled classes and resources into a single file with no transitive dependencies.
+
+<Steps>
+  <Step title="Copy the AAR into your project">
+    Place `adverify.aar` inside your app module's `libs/` directory:
+
+    ```
+    app/
+    └── libs/
+        └── adverify.aar
+    ```
+  </Step>
+
+  <Step title="Declare the fileTree dependency">
+    Add the following to your `app/build.gradle` `dependencies` block:
+
+    ```groovy
+    dependencies {
+        implementation fileTree(dir: 'libs', include: ['*.aar'])
+    }
+    ```
+
+    This picks up every AAR in `libs/` automatically. If you need to scope it to only AdVerify, use `include: ['adverify.aar']` instead.
+  </Step>
+
+  <Step title="Add the INTERNET permission">
+    Open `app/src/main/AndroidManifest.xml` and add the permission inside the `<manifest>` element, before the `<application>` tag:
+
+    ```xml
+    <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+        <uses-permission android:name="android.permission.INTERNET" />
+
+        <application
+            ...
+        </application>
+    </manifest>
+    ```
+  </Step>
+
+  <Step title="Set minSdkVersion">
+    Confirm your `app/build.gradle` specifies API 21 or higher:
+
+    ```groovy
+    android {
+        defaultConfig {
+            minSdkVersion 21
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  If your server uses HTTP rather than HTTPS, add `android:usesCleartextTraffic="true"` to the `<application>` tag in `AndroidManifest.xml`.
+</Note>
+
+## Next steps
+
+Once the AAR is on the classpath, follow the guide for your integration method:
+
+- [Android Studio integration](/sdk/android-studio) — initialize in your `Application` class and call `show()` from an Activity.
+- [MT Manager integration](/sdk/mt-manager) — build the DEX file and insert the smali hook into an existing APK.

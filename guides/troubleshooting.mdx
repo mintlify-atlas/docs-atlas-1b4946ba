@@ -1,0 +1,215 @@
+---
+title: "Troubleshooting"
+description: "Common issues and solutions when integrating AdVerify SDK"
+---
+
+This page covers the most common issues encountered when integrating AdVerify and how to resolve them.
+
+<AccordionGroup>
+  <Accordion title='IllegalStateException: "AdVerify.init() must be called before show()"'>
+    **Cause:** `AdVerify.show()` was called without a prior `AdVerify.init()` call. This is enforced inside `ensureInitialized()`:
+
+    ```java
+    // AdVerify.java
+    private static void ensureInitialized() {
+        if (!sInitialized) {
+            throw new IllegalStateException(
+                "AdVerify.init() must be called before show()");
+        }
+    }
+    ```
+
+    **Solution:** Call `AdVerify.init()` exactly once in your `Application.onCreate()`, before any Activity is created:
+
+    ```java
+    public class MyApplication extends Application {
+        @Override
+        public void onCreate() {
+            super.onCreate();
+            AdVerify.init(this, "YOUR_API_KEY", "https://your-server.com");
+        }
+    }
+    ```
+
+    Register the class in `AndroidManifest.xml`:
+
+    ```xml
+    <application
+        android:name=".MyApplication"
+        ... >
+    ```
+
+    For MT Manager integrations, use `AdVerify.start(activity)` instead — it combines init and show in one call and reads credentials from `AndroidManifest` meta-data.
+  </Accordion>
+
+  <Accordion title='IllegalArgumentException: "API key must not be null or empty"'>
+    **Cause:** An empty string or `null` was passed as the `apiKey` argument to `init()`:
+
+    ```java
+    // AdVerify.java
+    if (apiKey == null || apiKey.isEmpty()) {
+        throw new IllegalArgumentException(
+            "API key must not be null or empty");
+    }
+    ```
+
+    **Solution:** Verify that your API key is correctly copied from the admin panel under **API keys**. Common mistakes:
+
+    - Leading or trailing whitespace in the string literal.
+    - Reading from a config file or resource that hasn't been populated.
+    - Passing a placeholder value like `"YOUR_API_KEY"` literally.
+
+    For MT Manager integrations, confirm the `adverify.api_key` meta-data entry is present in `AndroidManifest.xml`:
+
+    ```xml
+    <meta-data
+        android:name="adverify.api_key"
+        android:value="your_actual_api_key" />
+    ```
+  </Accordion>
+
+  <Accordion title="Network errors / requests failing">
+    **Symptoms:** `onError()` fires immediately after `show()`, or the PIN dialog shows a "Verification failed" message.
+
+    **Checklist:**
+
+    1. **INTERNET permission** — ensure your `AndroidManifest.xml` declares the permission:
+
+       ```xml
+       <uses-permission android:name="android.permission.INTERNET" />
+       ```
+
+    2. **Server URL format** — do not include a trailing slash. The SDK strips trailing slashes automatically:
+
+       ```java
+       // AdVerify.java
+       sBaseUrl = baseUrl.endsWith("/")
+           ? baseUrl.substring(0, baseUrl.length() - 1)
+           : baseUrl;
+       ```
+
+       Use `"https://your-server.com"` not `"https://your-server.com/"`.
+
+    3. **Server is reachable** — test the init endpoint directly:
+
+       ```bash
+       curl -X POST https://your-server.com/api/sdk/init \
+         -H "x-api-key: YOUR_API_KEY" \
+         -H "Content-Type: application/json" \
+         -d '{"deviceId": "test-device"}'
+       ```
+
+    4. **HTTP vs HTTPS** — Android 9+ blocks plain HTTP traffic by default. Either use HTTPS or add a network security config.
+
+    5. **Timeouts** — `AdClient` uses a 10-second connect and read timeout. On slow connections or heavily loaded servers requests may time out. Check server response times.
+  </Accordion>
+
+  <Accordion title="PIN dialog not dismissing after correct PIN">
+    **Symptoms:** The user enters the correct PIN but the dialog stays open or shows an error.
+
+    **Checklist:**
+
+    1. **maxAttempts exhausted client-side** — the SDK dismisses the dialog and fires `onError("Max PIN attempts reached")` when `attempts >= maxAttempts` *before* calling the server. Check the `maxAttempts` value in the admin panel under **PIN configuration**.
+
+    2. **Server not finding the PIN** — the server looks for `(apiKeyId, deviceId, pin, isUsed=false)`. Check server logs for the `/api/sdk/verify-pin` request. Common causes:
+       - PIN was already used (`isUsed=true`).
+       - `deviceId` mismatch between the create-link call and the verify call (should not happen if the same device is used).
+       - The shortener webhook (`/api/sdk/generate-pin`) was not called, so no `UserPin` record was created.
+
+    3. **Server errors** — look for 4xx or 5xx responses in server logs. A `500` from `/api/sdk/verify-pin` will cause `dlg.showError("Verification failed")`.
+  </Accordion>
+
+  <Accordion title="Ads not showing after PIN verification">
+    **Symptoms:** PIN dialog dismisses successfully but no ad appears. `onError("No ads available")` fires.
+
+    **Checklist:**
+
+    1. **Ads are inactive** — open the admin panel, go to **Ads**, and confirm at least one ad has `isActive=true`.
+
+    2. **Ads not assigned to the API key** — each ad is linked to a specific `apiKeyId`. Make sure ads are created under the same API key used by the SDK.
+
+    3. **API key is inactive** — verify the API key has `isActive=true` in **API keys**. An inactive key will fail authentication middleware and return a 401 before the ads query runs.
+
+    4. **Confirm with curl:**
+
+       ```bash
+       curl https://your-server.com/api/sdk/ads \
+         -H "x-api-key: YOUR_API_KEY"
+       ```
+
+       The response should be `{ "ads": [ ... ] }` with at least one entry.
+  </Accordion>
+
+  <Accordion title="FLAG_SECURE causing blank screenshots or screen recording issues">
+    **Cause:** This is intentional. The `start()` method sets `FLAG_SECURE` on the activity window before displaying anything:
+
+    ```java
+    // AdVerify.java — start()
+    activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    ```
+
+    This flag prevents the window content from appearing in screenshots, screen recordings, and app switcher previews. It is added as an anti-piracy measure when using the MT Manager integration path.
+
+    **Note:** This flag is only set by `start()`, not by `show()`. If you are using the Android Studio integration and calling `init()` + `show()` directly, `FLAG_SECURE` is not applied unless you add it yourself.
+
+    If you want to allow screenshots in your app while still using AdVerify, use `init()` + `show()` directly and manage `FLAG_SECURE` yourself.
+  </Accordion>
+
+  <Accordion title="MT Manager / DEX injection issues">
+    **Symptoms:** App crashes on launch, `ClassNotFoundException`, or smali compilation errors after injecting the DEX.
+
+    **Checklist:**
+
+    1. **DEX location** — the `adverify.dex` file must be placed in the correct directory within the APK (typically `assets/` or alongside other DEX files, depending on your MT Manager workflow).
+
+    2. **Smali syntax** — the single-call invocation must match the method signature exactly:
+
+       ```smali
+       # Using start(Activity) — reads credentials from AndroidManifest meta-data
+       invoke-static {p0}, Lcom/adverify/sdk/AdVerify;->start(Landroid/app/Activity;)V
+       ```
+
+       Or with explicit credentials:
+
+       ```smali
+       const-string v0, "YOUR_API_KEY"
+       const-string v1, "https://your-server.com"
+       invoke-static {p0, v0, v1}, Lcom/adverify/sdk/AdVerify;->start(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;)V
+       ```
+
+    3. **meta-data in AndroidManifest** — when using the zero-register `start(Activity)` overload, `adverify.api_key` and optionally `adverify.base_url` must be declared inside the `<application>` element:
+
+       ```xml
+       <meta-data android:name="adverify.api_key" android:value="YOUR_KEY" />
+       <meta-data android:name="adverify.base_url" android:value="https://your-server.com" />
+       ```
+
+       If `adverify.base_url` is omitted, the SDK defaults to `https://ads.paidappstore.com`.
+  </Accordion>
+
+  <Accordion title="Database connection errors on the server">
+    **Symptoms:** Server fails to start, or all API requests return 500 with a Prisma connection error.
+
+    **Checklist:**
+
+    1. **DATABASE_URL format** — Prisma expects a PostgreSQL connection string:
+
+       ```bash
+       DATABASE_URL="postgresql://user:password@localhost:5432/adverify"
+       ```
+
+    2. **PostgreSQL is running** — verify the database process is up:
+
+       ```bash
+       pg_isready -h localhost -p 5432
+       ```
+
+    3. **Migrations applied** — if this is a fresh install, run the Prisma migration:
+
+       ```bash
+       npx prisma migrate deploy
+       ```
+
+    4. **Environment variable loaded** — confirm `.env` is in the server root and the `DATABASE_URL` variable is set. The server reads it via `dotenv` at startup.
+  </Accordion>
+</AccordionGroup>

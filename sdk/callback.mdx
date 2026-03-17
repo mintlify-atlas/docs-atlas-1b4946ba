@@ -1,0 +1,157 @@
+---
+title: "AdVerifyCallback"
+description: "Handle ad lifecycle events with the AdVerifyCallback interface"
+---
+
+`AdVerifyCallback` is the interface you implement to receive notifications about ad lifecycle events. It is entirely optional — `AdVerify.show(activity)` works without a callback. When you do provide one, each method is called on the main thread.
+
+## Interface definition
+
+```java
+public interface AdVerifyCallback {
+    void onAdShown();
+    void onAdClosed();
+    void onAdClicked(String redirectUrl);
+    void onError(String message);
+}
+```
+
+## Methods
+
+### `onAdShown()`
+
+Called immediately after the `AdDialog` is displayed to the user. At this point the dialog is visible and an impression has already been tracked on the server via `/api/sdk/impression`.
+
+**Parameters:** none
+
+**Typical uses:**
+- Pause background music or video playback while the ad is visible.
+- Log a local analytics event for ad display.
+- Update UI state to reflect that an ad is currently on screen.
+
+---
+
+### `onAdClosed()`
+
+Called when the ad dialog is dismissed — either by the user tapping the Close button, or by the dialog being cancelled. This is the signal that the ad flow is complete and you should proceed into the main app experience.
+
+**Parameters:** none
+
+**Typical uses:**
+- Navigate to the main screen or unlock app content.
+- Resume audio or video playback that was paused in `onAdShown()`.
+- Record the time the ad was shown for frequency-capping logic.
+
+---
+
+### `onAdClicked(String redirectUrl)`
+
+Called when the user taps the CTA button on the ad. The SDK has already opened `redirectUrl` in the device browser via `Intent.ACTION_VIEW` before this callback fires, so you do not need to handle navigation yourself.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `redirectUrl` | `String` | The destination URL the browser was opened to. May be an empty string if no URL was configured for the ad. |
+
+**Typical uses:**
+- Log an ad click event to your own analytics pipeline.
+- Track conversion attribution alongside the server-side click event that the SDK has already recorded.
+
+---
+
+### `onError(String message)`
+
+Called when the SDK cannot complete the ad flow. This covers several conditions:
+
+| Condition | Message |
+|---|---|
+| Activity is null or finishing at call time | `"Activity is null or finishing"` |
+| Server init request failed | Server error message or exception message |
+| No ads returned by the server | `"No ads available"` |
+| Ad fetch request failed | Server error message or exception message |
+| Max PIN attempts reached | `"Max PIN attempts reached"` |
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `message` | `String` | Human-readable description of the error. |
+
+**Typical uses:**
+- Fall through to the main app content so the user is not blocked.
+- Log the error for debugging.
+- Optionally display a toast or snackbar for development builds.
+
+<Note>
+  Always handle `onError()` by allowing the user to proceed. Network failures and empty ad inventories are normal conditions in production.
+</Note>
+
+## Complete implementation example
+
+```java
+import com.adverify.sdk.AdVerify;
+import com.adverify.sdk.AdVerifyCallback;
+
+public class SplashActivity extends AppCompatActivity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        AdVerify.show(this, new AdVerifyCallback() {
+
+            @Override
+            public void onAdShown() {
+                // Ad is visible — pause anything that would compete for attention
+            }
+
+            @Override
+            public void onAdClosed() {
+                // Ad dismissed — user can continue
+                navigateToMain();
+            }
+
+            @Override
+            public void onAdClicked(String redirectUrl) {
+                Log.d("AdVerify", "User clicked ad, destination: " + redirectUrl);
+                // Browser already opened; no further action required
+            }
+
+            @Override
+            public void onError(String message) {
+                Log.e("AdVerify", "Ad error: " + message);
+                // Don't block the user — proceed anyway
+                navigateToMain();
+            }
+        });
+    }
+
+    private void navigateToMain() {
+        startActivity(new Intent(this, MainActivity.class));
+        finish();
+    }
+}
+```
+
+## Showing without a callback
+
+The no-callback overload is available when you don't need lifecycle events:
+
+```java
+// No callback — fire and forget
+AdVerify.show(this);
+```
+
+Internally this calls `show(activity, null)`. All null checks are handled inside the SDK; every `callback != null` guard is in place, so passing `null` explicitly is safe.
+
+## Callback timing
+
+| Event | Timing |
+|---|---|
+| `onAdShown()` | After `dialog.show()` and the entrance animation has started |
+| `onAdClosed()` | Inside the `OnDismissListener` — fired on any dismiss path |
+| `onAdClicked()` | Inside the CTA button click listener, before the dialog is dismissed |
+| `onError()` | On the main thread, delivered via `Handler(Looper.getMainLooper())` |
+
+All callbacks are delivered on the main (UI) thread. You can safely update UI elements directly from any callback method.

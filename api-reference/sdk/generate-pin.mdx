@@ -1,0 +1,74 @@
+---
+title: "POST /api/sdk/generate-pin"
+description: "Callback endpoint called by the link shortener to generate and record a PIN for a device."
+---
+
+# POST /api/sdk/generate-pin
+
+This is a **server-to-server callback endpoint** — it is not called by the Android SDK directly. The paidappstore.com shortener backend calls this endpoint after a user completes the ad/article flow on the verification link. The server generates (or returns an existing unused) 6-digit PIN tied to the device and returns it so the shortener can display it to the user.
+
+<Warning>
+  This endpoint is public (no `x-api-key` required) but is protected by a shared `SHORTENER_SECRET`. All requests must include an `Authorization: Bearer <SHORTENER_SECRET>` header. Requests without a valid secret are rejected with `401`.
+</Warning>
+
+## Authentication
+
+No SDK API key is required. Instead, the request must include:
+
+```
+Authorization: Bearer <SHORTENER_SECRET>
+```
+
+The `SHORTENER_SECRET` is a shared secret configured on both the AdVerify server and the shortener backend. Only the shortener service should know this value.
+
+## Request
+
+<ParamField body="apiKey" type="string" required>
+  The SDK API key of the app the user is verifying for. The server uses this to look up the app and scope the generated PIN.
+</ParamField>
+
+<ParamField body="deviceId" type="string" required>
+  The device's unique identifier (Android ID). The PIN is bound to this device — only the same device can use it to verify.
+</ParamField>
+
+## Response
+
+<ResponseField name="pin" type="string">
+  A 6-digit numeric PIN string (e.g. `"482910"`). If an unused PIN already exists for this device and app, the existing PIN is returned rather than generating a new one.
+</ResponseField>
+
+<ResponseField name="deviceId" type="string">
+  The device ID echoed back from the request.
+</ResponseField>
+
+## Example
+
+```bash
+curl -X POST https://your-server.com/api/sdk/generate-pin \
+  -H "Authorization: Bearer YOUR_SHORTENER_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"apiKey": "sk_live_abc123", "deviceId": "a1b2c3d4e5f6"}'
+```
+
+```json Response
+{
+  "pin": "482910",
+  "deviceId": "a1b2c3d4e5f6"
+}
+```
+
+## PIN Generation Logic
+
+- If the device already has an **unused** PIN for this app, that PIN is returned (idempotent).
+- Otherwise, a new cryptographically random 6-digit PIN (`100000`–`999999`) is generated and stored.
+- PINs are scoped to the `(apiKeyId, deviceId)` pair — the same device on a different app gets a different PIN.
+
+## Errors
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| `400` | `apiKey and deviceId are required` | One or both required body fields are missing. |
+| `401` | `Unauthorized` | The `Authorization` header is missing or the bearer token does not match `SHORTENER_SECRET`. |
+| `403` | `Invalid API key` | The `apiKey` in the request body does not match any active API key in the database. |
+| `422` | Validation error | `apiKey` or `deviceId` is not a string. |
+| `500` | — | An unexpected server error occurred. |

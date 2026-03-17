@@ -1,0 +1,82 @@
+---
+title: "POST /api/sdk/verify-pin"
+description: "Verify a PIN for a device and unlock app access."
+---
+
+# POST /api/sdk/verify-pin
+
+Validates the PIN entered by the user against the PIN generated for their device. On success, the PIN is marked as used and the device is recorded as verified. Subsequent calls to `/api/sdk/init` will return `pinVerified: true` until the PIN expires (if an expiry duration is configured).
+
+If the device is already verified, this endpoint returns success immediately without consuming the PIN.
+
+## Authentication
+
+Requires an `x-api-key` header containing a valid, active API key.
+
+## Request
+
+<ParamField body="pin" type="string" required>
+  The 6-digit PIN entered by the user.
+</ParamField>
+
+<ParamField body="deviceId" type="string" required>
+  The device's unique identifier (Android ID). Must match the `deviceId` used when the PIN was generated.
+</ParamField>
+
+## Response
+
+<ResponseField name="verified" type="boolean">
+  `true` if the PIN was accepted and the device is now verified. `false` if the PIN was incorrect or invalid.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable status message. Examples: `"PIN verified. App unlocked!"`, `"Invalid PIN"`, `"Already verified"`, `"PIN not required"`.
+</ResponseField>
+
+## Example
+
+```bash
+curl -X POST https://your-server.com/api/sdk/verify-pin \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"pin": "482910", "deviceId": "a1b2c3d4e5f6"}'
+```
+
+```json Response — success
+{
+  "verified": true,
+  "message": "PIN verified. App unlocked!"
+}
+```
+
+```json Response — invalid PIN
+{
+  "verified": false,
+  "message": "Invalid PIN"
+}
+```
+
+```json Response — already verified
+{
+  "verified": true,
+  "message": "Already verified"
+}
+```
+
+## Errors
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| `401` | `API key is required` | The `x-api-key` header was not included in the request. |
+| `403` | `Invalid or inactive API key` | The provided API key does not exist or has been deactivated. |
+| `422` | Validation error | `pin` or `deviceId` is missing or not a string. |
+| `500` | — | An unexpected server error occurred. |
+
+## PIN Matching Rules
+
+A PIN is considered valid only when **all** of the following are true:
+
+- The PIN value matches a record tied to the same `apiKey` + `deviceId` combination
+- The PIN has not already been used (`isUsed: false`)
+
+If no matching unused PIN is found for the device, the server returns `verified: false`. The SDK should track failed attempts client-side against the `maxAttempts` value returned by `/api/sdk/init` and block further attempts once the limit is reached.

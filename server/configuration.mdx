@@ -1,0 +1,198 @@
+---
+title: "Server configuration"
+description: "Environment variables and configuration options for the AdVerify server"
+---
+
+All configuration is driven by environment variables loaded from a `.env` file at startup via `dotenv`. Variables are validated at boot with [Zod](https://zod.dev) — if a required variable is missing, the process exits with a schema parse error.
+
+## Environment variables
+
+### Core
+
+<ParamField body="DATABASE_URL" type="string" required>
+  PostgreSQL connection string. This is the only truly required variable — the server will not start without it.
+
+  ```ini
+  DATABASE_URL="postgresql://postgres:password@localhost:5432/adverify"
+  ```
+</ParamField>
+
+<ParamField body="PORT" type="number" default="3042">
+  The port the Express server listens on.
+
+  ```ini
+  PORT=3042
+  ```
+</ParamField>
+
+### Admin authentication
+
+The admin API uses HTTP Basic Authentication. Credentials are compared directly against these variables inside the `adminAuth` middleware.
+
+<Warning>
+  The defaults (`admin` / `admin123`) are intentionally weak. Always override both variables before deploying.
+</Warning>
+
+<ParamField body="ADMIN_USERNAME" type="string" default="admin">
+  Username for the admin API (`/api/admin/*` routes).
+
+  ```ini
+  ADMIN_USERNAME=myadmin
+  ```
+</ParamField>
+
+<ParamField body="ADMIN_PASSWORD" type="string" default="admin123">
+  Password for the admin API. Transmitted as a Base64-encoded Basic Auth header.
+
+  ```ini
+  ADMIN_PASSWORD=a-strong-random-password
+  ```
+</ParamField>
+
+### CORS
+
+<ParamField body="FRONTEND_URL" type="string" default="http://localhost:3000">
+  The primary origin allowed by the CORS policy. Typically the URL of your Next.js admin panel.
+
+  ```ini
+  FRONTEND_URL=https://admin.yourdomain.com
+  ```
+</ParamField>
+
+<ParamField body="ALLOWED_ORIGINS" type="string" default="">
+  Comma-separated list of additional origins permitted by CORS, beyond `FRONTEND_URL`.
+
+  ```ini
+  ALLOWED_ORIGINS=https://app.yourdomain.com,https://staging.yourdomain.com
+  ```
+
+  An empty string means no extra origins are allowed. Requests with no `Origin` header (e.g., mobile apps, `curl`, server-to-server calls) are always permitted.
+</ParamField>
+
+### Shortener integration
+
+The shortener service is used to generate PIN verification links. When a device taps the "Get PIN" button, the SDK calls `/api/sdk/create-link`, which calls the shortener API to create a unique URL that the user visits to receive their PIN.
+
+<ParamField body="BASE_URL" type="string" default="https://ads.paidappstore.com">
+  The base URL of this AdVerify server, used internally when constructing callback URLs.
+
+  ```ini
+  BASE_URL=https://ads.yourdomain.com
+  ```
+</ParamField>
+
+<ParamField body="SHORTENER_SECRET" type="string" default="change-me-in-production">
+  Shared secret used when authenticating requests to the shortener API.
+
+  ```ini
+  SHORTENER_SECRET=a-secure-random-string
+  ```
+</ParamField>
+
+<ParamField body="SHORTENER_API_URL" type="string" default="https://api.paidappstore.com">
+  Base URL of the shortener REST API. The server calls `POST {SHORTENER_API_URL}/api/v1/adverify/create` to generate verification links.
+
+  ```ini
+  SHORTENER_API_URL=https://api.yourdomain.com
+  ```
+</ParamField>
+
+<ParamField body="SHORTENER_FRONTEND_URL" type="string" default="https://paidappstore.com">
+  The user-facing shortener URL. Verification links are constructed as `{SHORTENER_FRONTEND_URL}/verify/{code}`.
+
+  ```ini
+  SHORTENER_FRONTEND_URL=https://yourdomain.com
+  ```
+</ParamField>
+
+## CORS configuration
+
+CORS is handled by the [`cors`](https://www.npmjs.com/package/cors) package with a dynamic origin callback:
+
+```typescript
+app.use(cors({
+  origin: (origin, callback) => {
+    // Requests with no Origin header are always allowed
+    if (!origin) return callback(null, true);
+    const allowed = [
+      env.FRONTEND_URL,
+      ...env.ALLOWED_ORIGINS,
+    ];
+    if (allowed.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
+```
+
+`credentials: true` is required so the browser sends cookies and the `Authorization` header cross-origin.
+
+## Authentication middleware
+
+Two middleware functions enforce access control:
+
+### `sdkAuth` — API key authentication
+
+Applied to all `/api/sdk/*` routes. Reads the `x-api-key` header and validates it against the `api_keys` table.
+
+```http
+GET /api/sdk/ads HTTP/1.1
+x-api-key: a3f8c1d2e4b5f6a7b8c9d0e1f2a3b4c5
+```
+
+| Condition | HTTP status | Response |
+|-----------|-------------|----------|
+| Header missing | `401` | `{ "error": "API key is required" }` |
+| Key not found or inactive | `403` | `{ "error": "Invalid or inactive API key" }` |
+| Key valid | — | Passes to next handler with `req.apiKeyData` set |
+
+### `adminAuth` — HTTP Basic Authentication
+
+Applied to all `/api/admin/*` routes. Decodes the `Authorization: Basic <base64>` header and compares against `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
+
+```http
+GET /api/admin/keys HTTP/1.1
+Authorization: Basic YWRtaW46Y2hhbmdlLW1l
+```
+
+| Condition | HTTP status | Response |
+|-----------|-------------|----------|
+| Header missing or not Basic | `401` | `{ "error": "Admin authentication required" }` |
+| Wrong credentials | `403` | `{ "error": "Invalid admin credentials" }` |
+
+## Request validation
+
+Route handlers use the `validate` middleware factory, which wraps a [Zod](https://zod.dev) schema and parses `req.body`. On failure it returns:
+
+```json
+{
+  "error": "Validation failed",
+  "details": [
+    { "code": "invalid_type", "path": ["deviceId"], "message": "Required" }
+  ]
+}
+```
+
+## Example `.env`
+
+```ini
+# Required
+DATABASE_URL="postgresql://postgres:password@localhost:5432/adverify"
+
+# Server
+PORT=3042
+
+# Admin credentials — change before deploying
+ADMIN_USERNAME=myadmin
+ADMIN_PASSWORD=a-strong-random-password
+
+# CORS
+FRONTEND_URL=https://admin.yourdomain.com
+ALLOWED_ORIGINS=
+
+# Shortener
+BASE_URL=https://ads.yourdomain.com
+SHORTENER_SECRET=a-secure-random-string
+SHORTENER_API_URL=https://api.paidappstore.com
+SHORTENER_FRONTEND_URL=https://paidappstore.com
+```

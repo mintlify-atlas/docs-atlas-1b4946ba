@@ -1,0 +1,233 @@
+---
+title: "Database"
+description: "PostgreSQL database schema and Prisma ORM configuration for AdVerify"
+---
+
+AdVerify uses **PostgreSQL** as its database and **[Prisma ORM](https://www.prisma.io)** (v6) to manage the schema, run migrations, and query data. The schema is defined in `server/prisma/schema.prisma`.
+
+## Setup
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+```
+
+The `DATABASE_URL` environment variable must be a valid PostgreSQL connection string:
+
+```
+postgresql://user:password@host:5432/database
+```
+
+## Common commands
+
+| Task | Command |
+|------|---------|
+| Push schema changes to the database | `bun run db:push` |
+| Deploy pending migrations (production) | `npx prisma migrate deploy` |
+| Generate the Prisma client | `npx prisma generate` |
+| Seed demo data | `bun run db:seed` |
+| Open Prisma Studio (GUI) | `bun run db:studio` |
+
+<Note>
+  `bun run db:push` (`prisma db push`) is convenient during development — it syncs the schema directly without creating a migration history. In production, use `prisma migrate deploy` to apply versioned migration files safely.
+</Note>
+
+## Seeding
+
+The seed script at `prisma/seed.ts` creates a demo `ApiKey` with a random 32-character hex key, a default `PinConfig`, and one sample interstitial ad:
+
+```bash
+bun run db:seed
+```
+
+```
+Seed complete. API Key: a3f8c1d2e4b5f6a7b8c9d0e1f2a3b4c5
+```
+
+The generated key can be used immediately to test SDK calls via the `x-api-key` header.
+
+## Models
+
+The schema defines **7 models**. All tables use snake_case column names mapped from camelCase Prisma field names.
+
+### ApiKey
+
+Table: `api_keys`
+
+The root entity. Each registered Android app has one `ApiKey`. All other records (ads, PIN config, user PINs, impressions, clicks) belong to an `ApiKey`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` (PK, autoincrement) | Internal integer ID |
+| `key` | `String` (unique) | 32-character random hex key sent in `x-api-key` header |
+| `appName` | `String` | Human-readable app name shown in the admin panel |
+| `packageName` | `String` (default `""`) | Android package name, e.g. `com.example.app` |
+| `isActive` | `Boolean` (default `true`) | When `false`, all SDK calls with this key are rejected with 403 |
+| `createdAt` | `DateTime` (default `now()`) | Record creation timestamp |
+
+**Relations:** has many `Ad`, `UserPin`, `Impression`, `Click`; has one `PinConfig`.
+
+---
+
+### Ad
+
+Table: `ads`
+
+An ad creative served to devices by the SDK. Ads belong to one `ApiKey` and are deleted when their parent key is deleted (`onDelete: Cascade`).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` (PK, autoincrement) | Internal integer ID |
+| `apiKeyId` | `Int` (FK → `api_keys.id`) | Owning API key |
+| `title` | `String` | Ad headline displayed in the dialog |
+| `description` | `String` (default `""`) | Supporting body text |
+| `imageUrl` | `String` (default `""`) | URL of the ad banner image |
+| `redirectUrl` | `String` (default `""`) | Destination URL when user taps the CTA button |
+| `adType` | `String` (default `"interstitial"`) | Ad format type, e.g. `interstitial` |
+| `buttonText` | `String` (default `"Visit Now"`) | Label for the call-to-action button |
+| `isActive` | `Boolean` (default `true`) | Only active ads are returned by `/api/sdk/ads` |
+| `priority` | `Int` (default `0`) | Higher values are returned first |
+| `createdAt` | `DateTime` (default `now()`) | Record creation timestamp |
+
+**Relations:** belongs to `ApiKey`; has many `Impression`, `Click`.
+
+---
+
+### PinConfig
+
+Table: `pin_configs`
+
+One-to-one PIN verification configuration per `ApiKey`. Created automatically when a new `ApiKey` is created (the admin service creates it with `pinConfig: { create: {} }`).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` (PK, autoincrement) | Internal integer ID |
+| `apiKeyId` | `Int` (unique FK → `api_keys.id`) | Owning API key — enforces one config per app |
+| `pinEnabled` | `Boolean` (default `false`) | Whether PIN verification is required for this app |
+| `pinMessage` | `String` (default `"Enter PIN to unlock"`) | Message shown in the PIN dialog |
+| `maxAttempts` | `Int` (default `3`) | Max incorrect PIN entries before the app is locked |
+| `getPinUrl` | `String` (default `""`) | URL opened when user taps "Get PIN" (overrides shortener) |
+| `getPinBtnText` | `String` (default `"Get PIN"`) | Label for the "Get PIN" button |
+| `enterPinBtnText` | `String` (default `"Enter PIN"`) | Label for the PIN submission button |
+| `expiryMode` | `String` (default `"never"`) | `"never"` — permanent; `"duration"` — expires after N hours |
+| `expiryHours` | `Int` (default `24`) | Hours until a PIN expires (only used when `expiryMode = "duration"`) |
+| `tutorialUrl` | `String` | URL opened when user taps the Tutorial button |
+| `pinInfoItems` | `Json` (default `[]`) | Array of info card items shown in the PIN dialog |
+| `joinLinks` | `Json` (default `[]`) | Array of community links shown in the Join dialog |
+
+**Relations:** belongs to `ApiKey`.
+
+---
+
+### UserPin
+
+Table: `user_pins`
+
+A unique 6-digit PIN bound to a specific device ID and API key. Generated when a device initiates the verification flow and marked as used once the correct PIN is submitted.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` (PK, autoincrement) | Internal integer ID |
+| `apiKeyId` | `Int` (FK → `api_keys.id`) | Owning API key |
+| `deviceId` | `String` | Android device identifier (Android ID) |
+| `pin` | `String` | 6-digit PIN code |
+| `isUsed` | `Boolean` (default `false`) | `true` after the PIN has been successfully verified |
+| `createdAt` | `DateTime` (default `now()`) | When the PIN was generated |
+| `usedAt` | `DateTime?` | When the PIN was verified (nullable) |
+| `expiresAt` | `DateTime?` | Expiry timestamp; `null` means never expires |
+
+**Unique constraint:** `(apiKeyId, deviceId, pin)` — prevents duplicate PINs for the same device and app.
+
+**Index:** `(apiKeyId, deviceId)` — optimises the frequent lookup by device.
+
+**Relations:** belongs to `ApiKey`.
+
+---
+
+### GlobalSettings
+
+Table: `global_settings`
+
+A singleton table (always `id = 1`) that stores server-wide PIN unlock settings.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` (PK, always `1`) | Singleton record ID |
+| `pinUnlockMode` | `String` (default `"per_app"`) | `"per_app"` — each app tracks its own verifications; `"global"` — verified on any app counts for all; `"global_except"` — global except excluded apps |
+| `excludedAppIds` | `Int[]` (default `[]`) | API key IDs excluded from global unlock when `pinUnlockMode = "global_except"` |
+| `updatedAt` | `DateTime` (`@updatedAt`) | Automatically updated on every write |
+
+---
+
+### Impression
+
+Table: `impressions`
+
+An event recorded each time an ad is displayed to a device. Used to calculate total impressions and CTR in the admin dashboard.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` (PK, autoincrement) | Internal integer ID |
+| `adId` | `Int` (FK → `ads.id`) | The ad that was shown |
+| `apiKeyId` | `Int` (FK → `api_keys.id`) | The app that served the impression |
+| `deviceId` | `String` (default `""`) | Device that received the ad |
+| `createdAt` | `DateTime` (default `now()`) | Event timestamp |
+
+**Relations:** belongs to `Ad`; belongs to `ApiKey`.
+
+---
+
+### Click
+
+Table: `clicks`
+
+An event recorded each time a user taps the CTA button on an ad. Mirrors the `Impression` structure.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` (PK, autoincrement) | Internal integer ID |
+| `adId` | `Int` (FK → `ads.id`) | The ad that was clicked |
+| `apiKeyId` | `Int` (FK → `api_keys.id`) | The app where the click occurred |
+| `deviceId` | `String` (default `""`) | Device that clicked the ad |
+| `createdAt` | `DateTime` (default `now()`) | Event timestamp |
+
+**Relations:** belongs to `Ad`; belongs to `ApiKey`.
+
+---
+
+## Relationships
+
+```
+ApiKey (1) ──── (1) PinConfig
+ApiKey (1) ──── (N) Ad
+ApiKey (1) ──── (N) UserPin
+ApiKey (1) ──── (N) Impression
+ApiKey (1) ──── (N) Click
+Ad     (1) ──── (N) Impression
+Ad     (1) ──── (N) Click
+GlobalSettings  (singleton)
+```
+
+All child records use `onDelete: Cascade` — deleting an `ApiKey` removes all associated ads, PIN config, user PINs, impressions, and clicks.
+
+## Prisma client
+
+The Prisma client is instantiated once and shared across services:
+
+```typescript
+// src/lib/prisma.ts
+import { PrismaClient } from '@prisma/client';
+export const prisma = new PrismaClient();
+```
+
+After modifying `schema.prisma`, regenerate the client before running the server:
+
+```bash
+npx prisma generate
+```

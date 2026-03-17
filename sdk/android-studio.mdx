@@ -1,0 +1,187 @@
+---
+title: "Android Studio integration"
+description: "Integrate AdVerify SDK in Android Studio projects using the AAR library"
+---
+
+This guide walks through adding AdVerify to an Android Studio project you build from source. The SDK is distributed as an AAR — a standard Android library archive.
+
+## Prerequisites
+
+- `adverify.aar` file
+- Android Studio with a project targeting API 21+
+- An API key and server URL from your admin panel
+
+## Setup
+
+<Steps>
+  <Step title="Copy the AAR to libs/">
+    Create the `libs/` directory inside your `app` module if it doesn't exist, then place `adverify.aar` there:
+
+    ```
+    app/
+    └── libs/
+        └── adverify.aar
+    ```
+  </Step>
+
+  <Step title="Add the dependency in build.gradle">
+    Open `app/build.gradle` and add a `fileTree` dependency so Gradle picks up every AAR in `libs/`:
+
+    ```groovy
+    dependencies {
+        implementation fileTree(dir: 'libs', include: ['*.aar'])
+        // ... your other dependencies
+    }
+    ```
+
+    Sync your project with **File → Sync Project with Gradle Files** after saving.
+  </Step>
+
+  <Step title="Add the INTERNET permission">
+    Open `app/src/main/AndroidManifest.xml` and declare the permission before the `<application>` element:
+
+    ```xml
+    <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+        <uses-permission android:name="android.permission.INTERNET" />
+
+        <application
+            android:name=".MyApplication"
+            ... >
+        </application>
+    </manifest>
+    ```
+  </Step>
+
+  <Step title="Initialize in your Application class">
+    Call `AdVerify.init()` once in `Application.onCreate()`. This stores the API key, base URL, and device ID for subsequent calls.
+
+    ```java
+    import com.adverify.sdk.AdVerify;
+
+    public class MyApplication extends Application {
+        @Override
+        public void onCreate() {
+            super.onCreate();
+            AdVerify.init(this, "YOUR_API_KEY", "https://your-server.com");
+        }
+    }
+    ```
+
+    Register your `Application` subclass in `AndroidManifest.xml` if you haven't already:
+
+    ```xml
+    <application
+        android:name=".MyApplication"
+        ... >
+    ```
+
+    <Note>
+      `init()` throws `IllegalArgumentException` if either `apiKey` or `baseUrl` is null or empty. Validate these values before calling init, or catch the exception during development.
+    </Note>
+  </Step>
+
+  <Step title="Show the ad from an Activity">
+    Call `AdVerify.show()` from any Activity. The simplest form takes no callback:
+
+    ```java
+    import com.adverify.sdk.AdVerify;
+
+    public class MainActivity extends AppCompatActivity {
+        @Override
+        protected void onCreate(Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            setContentView(R.layout.activity_main);
+
+            AdVerify.show(this);
+        }
+    }
+    ```
+
+    `show()` throws `IllegalStateException` if `init()` has not been called beforehand. If the Activity is finishing at call time, the SDK calls `onError()` on the callback (if provided) and returns without displaying anything.
+  </Step>
+
+  <Step title="Receive lifecycle events with a callback">
+    Pass an `AdVerifyCallback` to `show()` to be notified at each stage of the ad lifecycle:
+
+    ```java
+    import com.adverify.sdk.AdVerify;
+    import com.adverify.sdk.AdVerifyCallback;
+
+    public class MainActivity extends AppCompatActivity {
+        @Override
+        protected void onCreate(Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            setContentView(R.layout.activity_main);
+
+            AdVerify.show(this, new AdVerifyCallback() {
+                @Override
+                public void onAdShown() {
+                    // Ad dialog is now visible
+                }
+
+                @Override
+                public void onAdClosed() {
+                    // User dismissed the ad — proceed into the app
+                    loadMainContent();
+                }
+
+                @Override
+                public void onAdClicked(String redirectUrl) {
+                    // User tapped the CTA button; the SDK has already opened
+                    // the URL in the browser. Log or track here if needed.
+                    Log.d("AdVerify", "Ad clicked: " + redirectUrl);
+                }
+
+                @Override
+                public void onError(String message) {
+                    // Network failure, no ads available, or Activity finishing
+                    Log.e("AdVerify", "Error: " + message);
+                    loadMainContent();
+                }
+            });
+        }
+
+        private void loadMainContent() {
+            // Navigate to main screen
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Method signatures
+
+The full public API exposed by `AdVerify`:
+
+```java
+// One-time initialization — call in Application.onCreate()
+public static void init(Context context, String apiKey, String baseUrl)
+
+// Show ad, no callback
+public static void show(Activity activity)
+
+// Show ad with lifecycle callback
+public static void show(Activity activity, AdVerifyCallback callback)
+```
+
+### Error conditions
+
+| Exception | When thrown |
+|---|---|
+| `IllegalArgumentException` | `apiKey` or `baseUrl` is null or empty in `init()` |
+| `IllegalStateException` | `show()` is called before `init()` |
+
+When the Activity is null or finishing, `show()` calls `callback.onError("Activity is null or finishing")` and returns immediately rather than throwing.
+
+## SDK flow
+
+After `show()` is called the SDK runs the following sequence:
+
+1. Calls `/api/sdk/init` with the device's Android ID to check PIN status.
+2. If PIN verification is required and the device hasn't verified yet, displays the `PinVerifyDialog`.
+3. Once the device is cleared, fetches ads from `/api/sdk/ads`.
+4. Displays the `AdDialog` and tracks an impression via `/api/sdk/impression`.
+5. On CTA click, tracks a click event via `/api/sdk/click` and opens the redirect URL.
+
+See [AdVerifyCallback](/sdk/callback) for full details on each callback method, and [Dialogs](/sdk/dialogs) for a description of the UI components.

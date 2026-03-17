@@ -1,0 +1,75 @@
+---
+title: "Dashboard Statistics"
+description: "Retrieve aggregate metrics for impressions, clicks, API keys, ads, and user PINs."
+---
+
+## GET /api/admin/stats
+
+Returns a snapshot of key platform metrics. Impression and click counts are broken down into all-time totals and a today-only view (midnight UTC of the current day). The click-through rate (CTR) is derived from all-time totals.
+
+**Authentication**: HTTP Basic Auth required — see [Authentication](/api-reference/admin/auth).
+
+### Request
+
+No request body or query parameters.
+
+### Response
+
+<ResponseField name="totalKeys" type="integer" required>
+  Total number of API keys ever created, regardless of active status.
+</ResponseField>
+
+<ResponseField name="totalAds" type="integer" required>
+  Total number of ad records across all API keys.
+</ResponseField>
+
+<ResponseField name="totalImpressions" type="integer" required>
+  Cumulative number of ad impressions recorded since the service started.
+</ResponseField>
+
+<ResponseField name="totalClicks" type="integer" required>
+  Cumulative number of ad clicks recorded since the service started.
+</ResponseField>
+
+<ResponseField name="todayImpressions" type="integer" required>
+  Number of impressions recorded since midnight (00:00:00) of the current server day.
+</ResponseField>
+
+<ResponseField name="todayClicks" type="integer" required>
+  Number of clicks recorded since midnight (00:00:00) of the current server day.
+</ResponseField>
+
+<ResponseField name="ctr" type="string" required>
+  All-time click-through rate as a percentage string with two decimal places (e.g. `"4.27"`). Calculated as `(totalClicks / totalImpressions) * 100`. Returns `"0.00"` when there are no impressions.
+</ResponseField>
+
+<ResponseField name="totalPins" type="integer" required>
+  Total number of user PIN records in the database (generated but not necessarily used).
+</ResponseField>
+
+<ResponseField name="usedPins" type="integer" required>
+  Number of PIN records where `isUsed` is `true` — i.e. PINs that have been redeemed by a device at least once.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET https://your-server.com/api/admin/stats \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+{
+  "totalKeys": 5,
+  "totalAds": 12,
+  "totalImpressions": 84320,
+  "totalClicks": 3601,
+  "todayImpressions": 1402,
+  "todayClicks": 58,
+  "ctr": "4.27",
+  "totalPins": 9210,
+  "usedPins": 7843
+}
+```

@@ -1,80 +1,183 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get AdVerify running in your Android app in under 10 minutes"
 ---
 
-## Get started in three steps
+<Steps>
+  <Step title="Deploy the server">
+    Clone the repository and install dependencies in the `server/` directory.
 
-Get your documentation site running locally and make your first customization.
+    ```bash
+    cd server
+    bun install
+    ```
 
-### Step 1: Set up your local environment
+    Create a `.env` file and set your PostgreSQL connection string:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    DATABASE_URL="postgresql://user:password@localhost:5432/adverify"
+    ```
 
-### Step 2: Deploy your changes
+    Push the schema to your database and start the development server:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    bun run db:push
+    bun run dev
+    ```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    The server starts on `http://localhost:3000` by default. You should see:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```
+    AdVerify Server running on http://localhost:3000
+    ```
 
-### Step 3: Go live
+    <Note>
+      For production, run `bun run build` then `bun run start` to use the compiled
+      output from `dist/app.js`.
+    </Note>
+  </Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+  <Step title="Create an API key">
+    Open the admin panel at `http://localhost:3000` (or your deployed URL) and
+    navigate to **Keys**.
 
-## Next steps
+    Click **Create API Key**, enter your app name and Android package name, then
+    copy the generated key — you'll need it in the next step.
 
-Now that you have your docs running, explore these key features:
+    <Tip>
+      Each API key maps to one Android app. Create a separate key per package
+      name so you can track impressions, clicks, and PIN verifications
+      independently.
+    </Tip>
+  </Step>
+
+  <Step title="Add the SDK to your Android project">
+    Copy `adverify.aar` into your app's `libs/` directory, then add the
+    dependency in your module-level `build.gradle`:
+
+    ```groovy
+    dependencies {
+        implementation fileTree(dir: 'libs', include: ['*.aar'])
+    }
+    ```
+
+    Sync your Gradle project. No additional dependencies are required — the SDK
+    has zero external dependencies and targets a minimum API level of 21.
+
+    <Note>
+      The SDK uses only Android framework APIs (`Canvas`, `Paint`, `HttpURLConnection`,
+      `Settings.Secure`) and ships no third-party libraries.
+    </Note>
+  </Step>
+
+  <Step title="Initialize in your Application class">
+    Call `AdVerify.init()` once in `Application.onCreate()` before any activity
+    is created:
+
+    ```java
+    import android.app.Application;
+    import com.adverify.sdk.AdVerify;
+
+    public class MyApp extends Application {
+
+        @Override
+        public void onCreate() {
+            super.onCreate();
+            AdVerify.init(
+                this,
+                "YOUR_API_KEY",          // key from the admin panel
+                "https://your-server.com" // base URL of your deployed server
+            );
+        }
+    }
+    ```
+
+    Register `MyApp` in your `AndroidManifest.xml`:
+
+    ```xml
+    <application
+        android:name=".MyApp"
+        ... >
+    ```
+
+    `init()` validates the API key and base URL at call time and stores the
+    device's `ANDROID_ID` as the device identifier. It throws
+    `IllegalArgumentException` if either argument is null or empty.
+
+    <Warning>
+      Do not call `AdVerify.show()` before `AdVerify.init()`. Doing so throws
+      `IllegalStateException: AdVerify.init() must be called before show()`.
+    </Warning>
+  </Step>
+
+  <Step title="Show ads in your Activity">
+    Call `AdVerify.show()` from any `Activity` where you want to display the
+    ad (or PIN verification) flow:
+
+    ```java
+    import com.adverify.sdk.AdVerify;
+    import com.adverify.sdk.AdVerifyCallback;
+
+    public class MainActivity extends AppCompatActivity {
+
+        @Override
+        protected void onResume() {
+            super.onResume();
+            AdVerify.show(this, new AdVerifyCallback() {
+                @Override
+                public void onAdShown() {
+                    // Ad dialog is visible
+                }
+
+                @Override
+                public void onAdClosed() {
+                    // User dismissed the ad
+                }
+
+                @Override
+                public void onAdClicked(String redirectUrl) {
+                    // User tapped the ad's action button
+                }
+
+                @Override
+                public void onError(String message) {
+                    // Handle errors (no ads, network failure, max PIN attempts, etc.)
+                }
+            });
+        }
+    }
+    ```
+
+    `show()` is safe to call even if no ads are configured — the callback
+    receives `onError("No ads available")` and the UI is left unchanged.
+
+    If you don't need lifecycle callbacks, use the shorter overload:
+
+    ```java
+    AdVerify.show(this);
+    ```
+  </Step>
+</Steps>
+
+## What happens next
+
+After `AdVerify.show()` is called, the SDK runs the following flow automatically:
+
+1. **`/api/sdk/init`** — the SDK posts the device ID to the server. The response indicates whether PIN verification is required.
+2. **PIN flow** (if `pinEnabled=true` and `pinVerified=false`) — a `PinVerifyDialog` is displayed. The user taps **Generate PIN & Verify**, which opens a shortener link in the browser. After completing the verification article/ad, the user receives a PIN and enters it in the dialog.
+3. **Ad flow** — once the device is verified (or PIN is disabled), the SDK fetches ads from `/api/sdk/ads` and shows the first active ad in an `AdDialog`.
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Android SDK" icon="android" href="/sdk/installation">
+    Full installation options including MT Manager / smali injection.
+  </Card>
+  <Card title="Callback reference" icon="code" href="/sdk/callback">
+    All `AdVerifyCallback` events and when they fire.
+  </Card>
+  <Card title="Server configuration" icon="server" href="/server/setup">
+    Environment variables, ports, and production deployment.
+  </Card>
+  <Card title="PIN verification flow" icon="key" href="/guides/pin-verification-flow">
+    How PIN generation, expiry, and re-verification work end-to-end.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

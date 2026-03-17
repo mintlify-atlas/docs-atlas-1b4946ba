@@ -1,0 +1,160 @@
+---
+title: "Architecture"
+description: "How the Android SDK, backend server, and admin panel work together"
+---
+
+## System overview
+
+AdVerify consists of three independently deployable components that communicate
+over HTTP:
+
+```
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│   Android App    │────>│   Express API    │<────│   Admin Panel    │
+│   (SDK inside)   │     │   (Server)       │     │   (Next.js)      │
+└──────────────────┘     └──────────────────┘     └──────────────────┘
+                                  │
+                          ┌───────┴───────┐
+                          │   PostgreSQL   │
+                          │   (Prisma)     │
+                          └───────────────┘
+```
+
+The Android SDK talks only to the Express API. The Next.js admin panel also
+talks only to the Express API. Neither the SDK nor the admin panel connects
+directly to the database.
+
+## Components
+
+<CardGroup cols={2}>
+  <Card title="Android SDK" icon="android">
+    Written in Java with zero external dependencies. Targets Android API 21+.
+    Packaged as an AAR for Android Studio projects and as a DEX file for
+    MT Manager smali injection. All UI (dialogs, icons) is rendered
+    programmatically with `Canvas` and `Paint` — no XML layouts required.
+  </Card>
+  <Card title="Express.js server" icon="server">
+    TypeScript API server built with Express 4, Prisma ORM, and PostgreSQL.
+    Exposes two route namespaces: `/api/sdk/*` for the Android SDK and
+    `/api/admin/*` for the admin panel. Managed with `bun` in development
+    (`tsx watch`) and compiled to `dist/` for production.
+  </Card>
+  <Card title="Next.js admin panel" icon="layout-dashboard">
+    Next.js (App Router) dashboard for managing API keys, ad creatives, PIN
+    configuration, verified devices, and viewing impression/click stats. All
+    admin routes are protected by an admin token checked server-side.
+  </Card>
+  <Card title="PostgreSQL + Prisma" icon="database">
+    Single PostgreSQL database shared by all server components. Prisma handles
+    migrations (`db push`) and provides a type-safe client. The schema defines
+    six models covering keys, ads, PIN state, and analytics.
+  </Card>
+</CardGroup>
+
+## SDK flow
+
+Every call to `AdVerify.show()` triggers the following sequence inside
+`AdLoader.load()`:
+
+```
+App Launch
+    │
+    ▼
+SDK calls POST /api/sdk/init  (body: { deviceId })
+    │
+    ├── pinEnabled=false  OR  pinVerified=true
+    │       → fetch GET /api/sdk/ads
+    │       → show AdDialog (impression tracked via POST /api/sdk/impression)
+    │       → user taps CTA → POST /api/sdk/click → open URL
+    │
+    └── pinEnabled=true  AND  pinVerified=false
+            → show PinVerifyDialog (state 1: info card + buttons)
+                │
+                ├── "Generate PIN & Verify" button
+                │       → POST /api/sdk/create-link  (body: { deviceId })
+                │       → server creates paidappstore.com shortener link
+                │       → browser opens (user views articles/ads)
+                │       → user receives PIN
+                │       → dialog switches to PIN entry state (state 2)
+                │
+                ├── "Tutorial" button  → opens tutorialUrl in browser
+                ├── "Join Us" button   → shows JoinDialog (community links)
+                └── "Exit" button      → activity.finish()
+                │
+                ▼
+            User enters PIN → POST /api/sdk/verify-pin  (body: { pin, deviceId })
+                │
+                ├── valid   → dismiss dialog → fetch and show ad
+                └── invalid → show error + remaining attempts counter
+```
+
+The flow is orchestrated by `AdLoader` (`AdLoader.java`) and the network calls
+are made by `AdClient` (`internal/AdClient.java`). `AdVerify.show()` constructs
+both objects and calls `AdLoader.load()`.
+
+## Authentication
+
+<Tabs>
+  <Tab title="SDK endpoints">
+    All `/api/sdk/*` endpoints require an `x-api-key` header whose value must
+    match an active `ApiKey` row in the database.
+
+    ```java
+    // Set automatically by AdClient — you only supply the key once:
+    AdVerify.init(context, "YOUR_API_KEY", "https://your-server.com");
+    ```
+
+    The `AdClient` attaches the header to every outgoing request. If the key is
+    missing or inactive, the server returns `401 Unauthorized` and the SDK
+    surfaces the error through `AdVerifyCallback.onError()`.
+  </Tab>
+  <Tab title="Admin endpoints">
+    All `/api/admin/*` endpoints are protected by an admin token validated
+    server-side by the authentication middleware. The token is configured via
+    an environment variable on the server and is never exposed to the SDK.
+
+    The admin panel authenticates through the same mechanism — credentials are
+    entered in the login screen and stored in a session cookie.
+  </Tab>
+</Tabs>
+
+## Database models
+
+The Prisma schema at `server/prisma/schema.prisma` defines the following models:
+
+| Model | Table | Purpose |
+|---|---|---|
+| `ApiKey` | `api_keys` | One row per Android app. Holds the `key` string, `appName`, `packageName`, and `isActive` flag. Parent of all other models via cascade delete. |
+| `Ad` | `ads` | Ad creative for one API key. Stores `title`, `description`, `imageUrl`, `redirectUrl`, `adType`, `buttonText`, `priority`, and `isActive`. |
+| `PinConfig` | `pin_configs` | PIN settings for one API key: `pinEnabled`, `pinMessage`, `maxAttempts`, `expiryMode` (`never` or `duration`), `expiryHours`, `tutorialUrl`, `pinInfoItems` (JSON), and `joinLinks` (JSON). |
+| `UserPin` | `user_pins` | One row per device-PIN pair. Stores `deviceId`, `pin`, `isUsed`, `usedAt`, and nullable `expiresAt`. A unique constraint on `(apiKeyId, deviceId, pin)` prevents duplicates. |
+| `Impression` | `impressions` | One row per ad view. Records `adId`, `apiKeyId`, `deviceId`, and `createdAt`. |
+| `Click` | `clicks` | One row per ad tap. Same shape as `Impression`. |
+
+<Note>
+  `GlobalSettings` (`global_settings`) stores a singleton row (id=1) that
+  controls cross-app PIN unlock behavior: `pinUnlockMode` can be `per_app`,
+  `global`, or `global_except` (with `excludedAppIds`).
+</Note>
+
+## Shortener link flow for PIN generation
+
+When a user taps **Generate PIN & Verify**, the SDK calls
+`POST /api/sdk/create-link` with the device ID. The server:
+
+1. Looks up the `PinConfig.getPinUrl` for the API key.
+2. Calls the paidappstore.com shortener API to create a tracked link bound to
+   that device ID.
+3. Returns the shortener URL to the SDK.
+4. The SDK opens the URL in the system browser via `Intent.ACTION_VIEW`.
+
+The user completes the article or ad on the shortener page. paidappstore.com
+then sends a webhook (or the user is shown) a PIN. The user enters the PIN into
+the dialog, which posts it to `POST /api/sdk/verify-pin`. The server validates
+the PIN against the `UserPin` table, marks it as used, records `usedAt`, and
+(if `expiryMode=duration`) sets `expiresAt = now() + expiryHours`.
+
+On every subsequent `POST /api/sdk/init` call, the server checks whether the
+device's `UserPin` row exists and whether `expiresAt` is in the future (or
+`null` for `never` mode). An expired PIN is deleted from the database and the
+device must re-verify.

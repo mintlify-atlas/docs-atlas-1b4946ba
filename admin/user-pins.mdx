@@ -1,0 +1,126 @@
+---
+title: "User PINs"
+description: "View and manage verified device PINs"
+---
+
+Every time a device completes PIN verification, the server creates a `UserPin` record that ties a PIN code to that device's Android ID. The **User PINs** section lets you view all records, filter them by app or date, and take management actions on individual devices.
+
+## The `UserPin` model
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` | Auto-incremented primary key |
+| `apiKeyId` | `Int` | The API key (app) this PIN belongs to |
+| `deviceId` | `String` | The Android ID of the device. Combined with `apiKeyId` and `pin`, forms a unique constraint |
+| `pin` | `String` | The PIN code the user entered to verify |
+| `isUsed` | `Boolean` | `true` once the PIN has been successfully verified by the SDK |
+| `createdAt` | `DateTime` | When the PIN was generated |
+| `usedAt` | `DateTime?` | When the PIN was verified. `null` if not yet used |
+| `expiresAt` | `DateTime?` | When the PIN expires. `null` means it never expires |
+
+### PIN status
+
+The panel derives a status from the record fields:
+
+| Status | Condition |
+|--------|-----------|
+| **Pending** | `isUsed = false` — PIN generated but not yet entered by the user |
+| **Active** | `isUsed = true` and (`expiresAt` is null or in the future) |
+| **Expired** | `isUsed = true` and `expiresAt` is in the past |
+
+## Filtering
+
+The page supports two independent filters:
+
+- **App filter** — Dropdown that limits the table to PINs belonging to a specific API key.
+- **Date picker** — Limits the table to PINs created on a specific date. Also updates the stats cards above the table to reflect counts for that date.
+
+## PIN stats
+
+Above the table, four stat cards summarise the current dataset:
+
+| Stat | Description |
+|------|-------------|
+| Generated (today / selected date) | PINs created on the target date |
+| Used (today / selected date) | PINs created on the target date that were verified |
+| Active PINs | All used PINs that are not yet expired, across all time |
+| Expired PINs | All used PINs whose `expiresAt` is in the past |
+
+Stats are fetched from `GET /api/admin/user-pins/stats`. Pass `?date=YYYY-MM-DD` to retrieve counts for a specific date.
+
+```bash
+GET /api/admin/user-pins/stats?date=2026-03-15
+```
+
+```json
+{
+  "date": "2026-03-15",
+  "todayGenerated": 42,
+  "todayUsed": 38,
+  "yesterdayGenerated": 55,
+  "yesterdayUsed": 50,
+  "totalActive": 310,
+  "totalExpired": 91
+}
+```
+
+## Revoking a device
+
+Revoking a device deletes **all** PIN records for that `deviceId` and `apiKeyId` pair. The device will be prompted to verify again on its next app launch.
+
+In the panel, click **Revoke** on any PIN row. This sends:
+
+```bash
+POST /api/admin/user-pins/revoke
+```
+
+```json
+{
+  "deviceId": "a1b2c3d4e5f6a7b8",
+  "apiKeyId": 1
+}
+```
+
+<Warning>
+  Revoking a device removes all PIN records for that device across the app. There is no undo.
+</Warning>
+
+## Manually expiring a PIN
+
+Expiring a PIN forces the device to re-verify without deleting the record. The server sets `expiresAt` to the current time, causing the SDK to treat the PIN as invalid on the next `POST /api/sdk/init` call.
+
+In the panel, click **Expire** on any row with **Active** status. This sends:
+
+```bash
+POST /api/admin/user-pins/:id/expire
+```
+
+```json
+{ "status": "expired" }
+```
+
+<Info>
+  The **Expire** button only appears on Active PINs. Pending and already-expired PINs cannot be expired again.
+</Info>
+
+## Deleting a PIN record
+
+To permanently remove a single PIN record, click **Delete** on the row (via the Revoke button in the current UI — note that Revoke deletes all PINs for a device, not just one). To delete a single record use the API directly:
+
+```bash
+DELETE /api/admin/user-pins/:id
+```
+
+```json
+{ "status": "deleted" }
+```
+
+## API reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/admin/user-pins` | List up to 100 user PINs, optionally filtered by `?apiKeyId=` |
+| `GET` | `/api/admin/user-pins/stats` | PIN stats for today or a specific `?date=YYYY-MM-DD` |
+| `POST` | `/api/admin/user-pins/revoke` | Delete all PIN records for a `deviceId` + `apiKeyId` pair |
+| `POST` | `/api/admin/user-pins/:id/expire` | Force-expire a single PIN immediately |
+| `DELETE` | `/api/admin/user-pins/:id` | Delete a single PIN record |

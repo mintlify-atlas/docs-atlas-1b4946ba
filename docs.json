@@ -1,122 +1,104 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "AdVerify SDK",
+  "theme": "sequoia",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#3b82f6",
+    "light": "#eff6ff",
+    "dark": "#1e3a5f"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/yashmakhija/AdVerifySDK"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/yashmakhija/AdVerifySDK"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "architecture"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Android SDK",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "sdk/installation",
+              "sdk/android-studio",
+              "sdk/mt-manager",
+              "sdk/callback",
+              "sdk/dialogs"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Backend Server",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "server/setup",
+              "server/configuration",
+              "server/database"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Admin Panel",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "admin/overview",
+              "admin/api-keys",
+              "admin/ads",
+              "admin/pin-config",
+              "admin/user-pins"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/pin-verification-flow",
+              "guides/ad-serving",
+              "guides/pin-expiry",
+              "guides/troubleshooting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "SDK Endpoints",
             "pages": [
-              "api-reference/introduction"
+              "api-reference/sdk/init",
+              "api-reference/sdk/verify-pin",
+              "api-reference/sdk/create-link",
+              "api-reference/sdk/generate-pin",
+              "api-reference/sdk/ads",
+              "api-reference/sdk/impression",
+              "api-reference/sdk/click"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Admin Endpoints",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api-reference/admin/auth",
+              "api-reference/admin/stats",
+              "api-reference/admin/keys",
+              "api-reference/admin/ads",
+              "api-reference/admin/pin-config",
+              "api-reference/admin/user-pins",
+              "api-reference/admin/settings"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

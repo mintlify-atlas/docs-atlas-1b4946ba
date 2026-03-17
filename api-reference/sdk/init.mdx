@@ -1,0 +1,138 @@
+---
+title: "POST /api/sdk/init"
+description: "Initialize the SDK and retrieve PIN configuration, verification status, and app settings for a device."
+---
+
+# POST /api/sdk/init
+
+The first call the SDK makes on app launch. Returns the app's PIN configuration, whether the current device is already verified, ad gate settings, and the community links to display in the join dialog. The server checks PIN expiry on every call — if a previously verified PIN has expired, `pinVerified` is returned as `false` and the user must re-verify.
+
+## Authentication
+
+Requires an `x-api-key` header containing a valid, active API key.
+
+## Request
+
+<ParamField body="deviceId" type="string">
+  The device's unique identifier (Android ID). Used to look up whether this device has already completed PIN verification. If omitted, `pinVerified` will always be `false`.
+</ParamField>
+
+## Response
+
+<ResponseField name="appName" type="string">
+  The display name of the app associated with the API key.
+</ResponseField>
+
+<ResponseField name="pinEnabled" type="boolean">
+  Whether PIN verification is required before the user can access the app. If `false`, skip the verification dialog and proceed directly to ads.
+</ResponseField>
+
+<ResponseField name="pinVerified" type="boolean">
+  Whether this device has already completed PIN verification and the verification has not expired. If `true`, skip the PIN dialog.
+</ResponseField>
+
+<ResponseField name="pinMessage" type="string">
+  The message displayed at the top of the PIN verification dialog (e.g. `"Verify your device to continue"`).
+</ResponseField>
+
+<ResponseField name="maxAttempts" type="number">
+  Maximum number of incorrect PIN attempts allowed before the user is locked out.
+</ResponseField>
+
+<ResponseField name="getPinBtnText" type="string">
+  Label for the button that opens the shortener link to earn a PIN (e.g. `"Generate PIN & Verify"`).
+</ResponseField>
+
+<ResponseField name="enterPinBtnText" type="string">
+  Label for the button that switches the dialog to PIN entry mode (e.g. `"Enter PIN"`).
+</ResponseField>
+
+<ResponseField name="tutorialUrl" type="string">
+  URL opened when the user taps the Tutorial button in the PIN dialog.
+</ResponseField>
+
+<ResponseField name="pinInfoItems" type="array">
+  List of informational items shown in the PIN dialog's info card. Falls back to built-in defaults if none are configured.
+
+  <Expandable title="pinInfoItems item fields">
+    <ResponseField name="icon" type="string">
+      Icon identifier used to select the Canvas-drawn icon. Supported values: `device`, `info`, `clock`, `hourglass`, `key`, `sparkle`, `star`, `crown`, `warning`, `shield-x`.
+    </ResponseField>
+    <ResponseField name="text" type="string">
+      The label displayed next to the icon.
+    </ResponseField>
+    <ResponseField name="color" type="string">
+      Hex color string for the icon dot (e.g. `"#3b82f6"`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="joinLinks" type="array">
+  Community links shown in the Join dialog. Falls back to built-in defaults if none are configured.
+
+  <Expandable title="joinLinks item fields">
+    <ResponseField name="name" type="string">
+      Display name of the community (e.g. `"Public Channel"`).
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Short description shown below the name (e.g. `"Apps, APKs & Mods"`).
+    </ResponseField>
+    <ResponseField name="url" type="string">
+      URL opened when the user taps this link.
+    </ResponseField>
+    <ResponseField name="iconType" type="string">
+      Icon style to render. Use `"telegram"` for a paper plane icon or `"channel"` for a megaphone icon.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+```bash
+curl -X POST https://your-server.com/api/sdk/init \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"deviceId": "a1b2c3d4e5f6"}'
+```
+
+```json Response
+{
+  "appName": "MyApp",
+  "pinEnabled": true,
+  "pinVerified": false,
+  "pinMessage": "Verify your device to continue",
+  "maxAttempts": 5,
+  "getPinBtnText": "Generate PIN & Verify",
+  "enterPinBtnText": "Enter PIN",
+  "tutorialUrl": "https://t.me/EllieTutorials/36",
+  "pinInfoItems": [
+    { "icon": "device", "text": "Device Not Registered", "color": "#3b82f6" },
+    { "icon": "hourglass", "text": "Access Duration: 24 Hours", "color": "#22c55e" },
+    { "icon": "key", "text": "Automatic Password System", "color": "#8b5cf6" },
+    { "icon": "crown", "text": "Premium Users Only", "color": "#eab308" },
+    { "icon": "shield", "text": "VPN & Emulators Not Allowed", "color": "#ef4444" }
+  ],
+  "joinLinks": [
+    {
+      "name": "Public Channel",
+      "description": "Apps, APKs & Mods",
+      "url": "https://t.me/Android_apps_apks_mod",
+      "iconType": "channel"
+    },
+    {
+      "name": "Private Channel",
+      "description": "Exclusive Content",
+      "url": "https://t.me/+PXcn1RVLom0xMzU1",
+      "iconType": "telegram"
+    }
+  ]
+}
+```
+
+## Errors
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| `401` | `API key is required` | The `x-api-key` header was not included in the request. |
+| `403` | `Invalid or inactive API key` | The provided API key does not exist or has been deactivated. |
+| `500` | — | An unexpected server error occurred. |

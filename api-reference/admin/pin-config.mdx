@@ -1,0 +1,213 @@
+---
+title: "PIN Config"
+description: "Manage per-app PIN unlock configuration including messaging, expiry behaviour, and tutorial links."
+---
+
+Each API key has exactly one PIN config record, created automatically when the key is created. The `POST /api/admin/pin-config` endpoint is an **upsert** — it creates the record if it does not exist or updates it if it does, matched by `apiKeyId`.
+
+When the `expiryMode` is changed to `duration`, the server retroactively sets an `expiresAt` on all active PINs that had no expiry. When changed to `never`, it clears `expiresAt` from all active PINs for that key.
+
+**Authentication**: HTTP Basic Auth required on all endpoints — see [Authentication](/api-reference/admin/auth).
+
+---
+
+## GET /api/admin/pin-config
+
+Returns the PIN configuration for every API key.
+
+### Request
+
+No parameters.
+
+### Response
+
+An array of PIN config objects.
+
+<ResponseField name="id" type="integer" required>
+  Unique numeric identifier for the config record.
+</ResponseField>
+
+<ResponseField name="apiKeyId" type="integer" required>
+  ID of the API key this config belongs to. One-to-one relationship.
+</ResponseField>
+
+<ResponseField name="pinEnabled" type="boolean" required>
+  Whether PIN enforcement is active for this app. Defaults to `false`.
+</ResponseField>
+
+<ResponseField name="pinMessage" type="string" required>
+  Message shown to users on the PIN entry screen. Defaults to `"Enter PIN to unlock"`.
+</ResponseField>
+
+<ResponseField name="maxAttempts" type="integer" required>
+  Number of failed PIN attempts allowed before the device is locked out. Defaults to `3`.
+</ResponseField>
+
+<ResponseField name="getPinUrl" type="string" required>
+  URL users are directed to in order to obtain their PIN (e.g. a Telegram channel or web page). Defaults to `""`.
+</ResponseField>
+
+<ResponseField name="getPinBtnText" type="string" required>
+  Label for the button that opens `getPinUrl`. Defaults to `"Get PIN"`.
+</ResponseField>
+
+<ResponseField name="enterPinBtnText" type="string" required>
+  Label for the button that opens the PIN entry field. Defaults to `"Enter PIN"`.
+</ResponseField>
+
+<ResponseField name="expiryMode" type="string" required>
+  Controls PIN expiry behaviour. `"never"` — PINs remain valid indefinitely. `"duration"` — PINs expire `expiryHours` after they are first used. Defaults to `"never"`.
+</ResponseField>
+
+<ResponseField name="expiryHours" type="integer" required>
+  Number of hours after first use before a PIN expires. Only applies when `expiryMode` is `"duration"`. Defaults to `24`.
+</ResponseField>
+
+<ResponseField name="tutorialUrl" type="string" required>
+  URL for a tutorial that explains how to get and use the PIN. Shown in the PIN UI. Defaults to `"https://t.me/EllieTutorials/36"`.
+</ResponseField>
+
+<ResponseField name="pinInfoItems" type="array" required>
+  JSON array of informational items displayed on the PIN screen (e.g. bullet points explaining what the PIN is for). Defaults to `[]`.
+</ResponseField>
+
+<ResponseField name="joinLinks" type="array" required>
+  JSON array of links (e.g. community or channel join links) presented alongside the PIN UI. Defaults to `[]`.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET https://your-server.com/api/admin/pin-config \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+[
+  {
+    "id": 1,
+    "apiKeyId": 3,
+    "pinEnabled": true,
+    "pinMessage": "Enter your PIN to continue",
+    "maxAttempts": 5,
+    "getPinUrl": "https://t.me/myapp_pins",
+    "getPinBtnText": "Get PIN",
+    "enterPinBtnText": "Enter PIN",
+    "expiryMode": "duration",
+    "expiryHours": 72,
+    "tutorialUrl": "https://t.me/EllieTutorials/36",
+    "pinInfoItems": [
+      { "text": "Join our Telegram channel to receive your PIN" }
+    ],
+    "joinLinks": [
+      { "label": "Join Channel", "url": "https://t.me/myapp" }
+    ]
+  }
+]
+```
+
+---
+
+## POST /api/admin/pin-config
+
+Creates or updates the PIN config for a given API key (upsert by `apiKeyId`). All fields except `apiKeyId` are optional — omitted fields retain their current values.
+
+When `expiryMode` is set to `"duration"`, the server will retroactively backfill `expiresAt` on existing active PINs that have no expiry. When set to `"never"`, it clears `expiresAt` from all active PINs for that key.
+
+### Request
+
+<ParamField body="apiKeyId" type="integer" required>
+  ID of the API key whose PIN config should be created or updated.
+</ParamField>
+
+<ParamField body="pinEnabled" type="boolean">
+  Enable or disable PIN enforcement for this app.
+</ParamField>
+
+<ParamField body="pinMessage" type="string">
+  Message displayed on the PIN entry screen.
+</ParamField>
+
+<ParamField body="maxAttempts" type="integer">
+  Maximum number of failed attempts before lockout.
+</ParamField>
+
+<ParamField body="getPinUrl" type="string">
+  URL where users can obtain their PIN.
+</ParamField>
+
+<ParamField body="getPinBtnText" type="string">
+  Button label for the get-PIN action.
+</ParamField>
+
+<ParamField body="enterPinBtnText" type="string">
+  Button label for the enter-PIN action.
+</ParamField>
+
+<ParamField body="expiryMode" type="string">
+  PIN expiry mode. `"never"` or `"duration"`. Changing this value triggers a retroactive update of existing PIN records.
+</ParamField>
+
+<ParamField body="expiryHours" type="integer">
+  Hours until a PIN expires after first use. Only relevant when `expiryMode` is `"duration"`.
+</ParamField>
+
+<ParamField body="tutorialUrl" type="string">
+  URL to a tutorial shown in the PIN UI.
+</ParamField>
+
+<ParamField body="pinInfoItems" type="array">
+  JSON array of informational items shown on the PIN screen.
+</ParamField>
+
+<ParamField body="joinLinks" type="array">
+  JSON array of join links presented in the PIN UI.
+</ParamField>
+
+### Response
+
+The created or updated PIN config object (same shape as the list response items).
+
+### Example
+
+```bash
+curl -X POST https://your-server.com/api/admin/pin-config \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiKeyId": 3,
+    "pinEnabled": true,
+    "pinMessage": "Enter your PIN to continue",
+    "maxAttempts": 5,
+    "getPinUrl": "https://t.me/myapp_pins",
+    "getPinBtnText": "Get PIN",
+    "enterPinBtnText": "Enter PIN",
+    "expiryMode": "duration",
+    "expiryHours": 72,
+    "tutorialUrl": "https://t.me/EllieTutorials/36",
+    "pinInfoItems": [{"text": "Join our Telegram channel to receive your PIN"}],
+    "joinLinks": [{"label": "Join Channel", "url": "https://t.me/myapp"}]
+  }'
+```
+
+**200 OK**
+
+```json
+{
+  "id": 1,
+  "apiKeyId": 3,
+  "pinEnabled": true,
+  "pinMessage": "Enter your PIN to continue",
+  "maxAttempts": 5,
+  "getPinUrl": "https://t.me/myapp_pins",
+  "getPinBtnText": "Get PIN",
+  "enterPinBtnText": "Enter PIN",
+  "expiryMode": "duration",
+  "expiryHours": 72,
+  "tutorialUrl": "https://t.me/EllieTutorials/36",
+  "pinInfoItems": [{"text": "Join our Telegram channel to receive your PIN"}],
+  "joinLinks": [{"label": "Join Channel", "url": "https://t.me/myapp"}]
+}
+```

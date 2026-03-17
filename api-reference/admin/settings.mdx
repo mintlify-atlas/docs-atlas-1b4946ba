@@ -1,0 +1,106 @@
+---
+title: "Global Settings"
+description: "Read and update platform-wide PIN unlock mode and per-app exclusion list."
+---
+
+Global settings control how PIN unlocks are scoped across applications. The `pinUnlockMode` determines whether a PIN redemption on one app carries over to other apps on the same device.
+
+There is a single settings record in the database (id `1`). The `POST` endpoint is an upsert — it creates the record on first call and updates it on subsequent calls.
+
+**Authentication**: HTTP Basic Auth required on all endpoints — see [Authentication](/api-reference/admin/auth).
+
+---
+
+## GET /api/admin/settings
+
+Returns the current global settings. If no settings have been saved yet, returns the defaults.
+
+### Request
+
+No parameters.
+
+### Response
+
+<ResponseField name="pinUnlockMode" type="string" required>
+  Controls how a PIN redemption is scoped:
+
+  - `"per_app"` — a PIN unlocks access only for the specific app (API key) it was issued under. This is the default.
+  - `"global"` — a PIN redeemed for any app unlocks all apps on the same device.
+  - `"global_except"` — same as `"global"` but apps listed in `excludedAppIds` are excluded from the global unlock and must each be unlocked individually.
+</ResponseField>
+
+<ResponseField name="excludedAppIds" type="integer[]" required>
+  Array of API key IDs that are excluded from global PIN unlock when `pinUnlockMode` is `"global_except"`. Empty array when not applicable. Defaults to `[]`.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET https://your-server.com/api/admin/settings \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+{
+  "pinUnlockMode": "global_except",
+  "excludedAppIds": [4, 7]
+}
+```
+
+---
+
+## POST /api/admin/settings
+
+Updates the global settings. Both fields are required — the entire settings record is replaced.
+
+### Request
+
+<ParamField body="pinUnlockMode" type="string" required>
+  The unlock scope mode. Must be one of `"per_app"`, `"global"`, or `"global_except"`.
+</ParamField>
+
+<ParamField body="excludedAppIds" type="integer[]" required>
+  Array of API key IDs to exclude from global unlock. Pass an empty array `[]` when using `"per_app"` or `"global"` mode.
+</ParamField>
+
+### Response
+
+The full updated settings record from the database, including the internal `id` and `updatedAt` fields.
+
+<ResponseField name="id" type="integer" required>
+  Always `1` — there is a single global settings record.
+</ResponseField>
+
+<ResponseField name="pinUnlockMode" type="string" required>
+  The saved unlock mode.
+</ResponseField>
+
+<ResponseField name="excludedAppIds" type="integer[]" required>
+  The saved list of excluded API key IDs.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp of when the settings were last updated.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://your-server.com/api/admin/settings \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk" \
+  -H "Content-Type: application/json" \
+  -d '{"pinUnlockMode": "global_except", "excludedAppIds": [4, 7]}'
+```
+
+**200 OK**
+
+```json
+{
+  "id": 1,
+  "pinUnlockMode": "global_except",
+  "excludedAppIds": [4, 7],
+  "updatedAt": "2025-11-20T17:30:00.000Z"
+}
+```

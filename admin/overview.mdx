@@ -1,0 +1,70 @@
+---
+title: "Admin panel overview"
+description: "Web-based dashboard for managing AdVerify configuration and analytics"
+---
+
+The admin panel is a Next.js (App Router) application that gives you full control over every AdVerify resource — API keys, ad creatives, PIN verification settings, and verified device records — without touching the server directly.
+
+## Authentication
+
+All admin routes are protected by HTTP Basic-style token authentication. When you open the panel you are prompted for a username and password. On success the panel receives a JWT-style session token, which it attaches to every subsequent request as an `Authorization` header. The server validates the token on every call via the `adminAuth` middleware.
+
+Credentials are configured server-side through environment variables (`ADMIN_USERNAME` and `ADMIN_PASSWORD`). There is no self-service registration.
+
+<Note>
+  The `GET /api/admin/me` endpoint is available to verify a stored token without performing a full page reload. The panel calls it on mount to confirm the session is still valid.
+</Note>
+
+## Dashboard sections
+
+<CardGroup cols={2}>
+  <Card title="Dashboard" icon="chart-bar" href="/admin/overview">
+    Real-time stats: total impressions, clicks, CTR, API keys, ads, PIN counts, and per-day PIN analytics.
+  </Card>
+  <Card title="API keys" icon="key" href="/admin/api-keys">
+    Create and manage one API key per Android app. Enable, disable, or delete keys.
+  </Card>
+  <Card title="Ads" icon="megaphone" href="/admin/ads">
+    Create ad creatives (interstitial, banner, dialog). Track impressions and clicks per ad.
+  </Card>
+  <Card title="PIN configuration" icon="shield" href="/admin/pin-config">
+    Configure PIN verification behaviour per app: enable/disable, message text, expiry mode, button labels, info cards, and community links.
+  </Card>
+  <Card title="User PINs" icon="lock" href="/admin/user-pins">
+    View every device-bound PIN across all apps. Revoke devices, force-expire PINs, or delete records.
+  </Card>
+</CardGroup>
+
+## Dashboard stats
+
+The dashboard fetches two endpoints on load:
+
+- `GET /api/admin/stats` — aggregate ad and key counters
+- `GET /api/admin/user-pins/stats` — PIN-specific daily counters
+
+### Ad and key stats (`/api/admin/stats`)
+
+| Stat | Description |
+|------|-------------|
+| `totalKeys` | Total number of API keys in the database |
+| `totalAds` | Total number of ad records |
+| `totalImpressions` | Lifetime impression count across all ads |
+| `todayImpressions` | Impressions recorded since midnight UTC today |
+| `totalClicks` | Lifetime click count across all ads |
+| `todayClicks` | Clicks recorded since midnight UTC today |
+| `ctr` | Click-through rate as a percentage (`totalClicks / totalImpressions × 100`) |
+| `totalPins` | Total UserPin records ever created |
+| `usedPins` | UserPin records where `isUsed = true` |
+
+### PIN analytics (`/api/admin/user-pins/stats`)
+
+| Stat | Description |
+|------|-------------|
+| `todayGenerated` | PINs created today |
+| `todayUsed` | PINs created today that have been verified |
+| `yesterdayGenerated` | PINs created yesterday |
+| `yesterdayUsed` | PINs created yesterday that were verified |
+| `totalActive` | PINs that are used and not yet expired |
+| `totalExpired` | PINs that are used and past their `expiresAt` time |
+
+You can also pass a `?date=YYYY-MM-DD` query parameter to the stats endpoint to retrieve counts for any historical date.

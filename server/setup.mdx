@@ -1,0 +1,152 @@
+---
+title: "Server setup"
+description: "Deploy and run the AdVerify backend server"
+---
+
+The AdVerify backend is an Express.js API server written in TypeScript. It serves the Android SDK, powers the admin panel, and manages the PostgreSQL database via Prisma ORM.
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="Node.js & Bun" icon="server">
+    [Bun](https://bun.sh) is used as the runtime and package manager. Install it with:
+    ```bash
+    curl -fsSL https://bun.sh/install | bash
+    ```
+    Node.js 18+ is also required for `tsx` and the TypeScript compiler.
+  </Card>
+  <Card title="PostgreSQL" icon="database">
+    A running PostgreSQL instance (version 13+). You'll need a connection string in the format:
+    ```
+    postgresql://user:password@host:5432/dbname
+    ```
+  </Card>
+</CardGroup>
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/your-org/adverify.git
+    cd adverify/server
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    bun install
+    ```
+
+    This installs all runtime dependencies including Express, Prisma Client, CORS, Multer, Zod, and dotenv.
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the `server/` directory:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    At minimum, set `DATABASE_URL`:
+
+    ```ini
+    DATABASE_URL="postgresql://postgres:password@localhost:5432/adverify"
+    PORT=3042
+    ADMIN_USERNAME=admin
+    ADMIN_PASSWORD=change-me-in-production
+    FRONTEND_URL=http://localhost:3000
+    SHORTENER_SECRET=change-me-in-production
+    ```
+
+    See [Server configuration](/server/configuration) for the full list of variables.
+  </Step>
+
+  <Step title="Push the database schema">
+    Apply the Prisma schema to your database:
+
+    ```bash
+    bun run db:push
+    ```
+
+    This runs `prisma db push` and creates all tables. For production environments with migration history, use:
+
+    ```bash
+    npx prisma migrate deploy
+    ```
+  </Step>
+
+  <Step title="Seed the database (optional)">
+    Populate the database with a demo API key and a sample ad:
+
+    ```bash
+    bun run db:seed
+    ```
+
+    The seed script creates one `ApiKey` record (with a random hex key), a linked `PinConfig`, and a sample interstitial ad. The generated API key is printed to the console.
+
+    ```
+    Seed complete. API Key: a3f8c1d2e4b5f6a7b8c9d0e1f2a3b4c5
+    ```
+
+    <Note>
+      The seed is safe to run once on a fresh database. Running it multiple times creates additional demo records.
+    </Note>
+  </Step>
+
+  <Step title="Start the server">
+    <Tabs>
+      <Tab title="Development">
+        Starts the server with hot-reload using `tsx watch`:
+
+        ```bash
+        bun run dev
+        ```
+      </Tab>
+      <Tab title="Production">
+        Compile TypeScript first, then run the compiled output:
+
+        ```bash
+        bun run build && bun run start
+        ```
+
+        `bun run build` runs `tsc` to emit JavaScript to `dist/`. `bun run start` runs `node dist/app.js`.
+      </Tab>
+    </Tabs>
+
+    On startup the server prints:
+
+    ```
+    AdVerify Server running on http://localhost:3042
+    ```
+  </Step>
+</Steps>
+
+## Health check
+
+Once running, verify the server is up:
+
+```bash
+curl http://localhost:3042/api/health
+```
+
+```json
+{
+  "status": "ok",
+  "uptime": 12.345,
+  "timestamp": "2026-03-17T10:00:00.000Z"
+}
+```
+
+The root endpoint `GET /` returns the same shape and is useful for uptime monitors.
+
+## Available scripts
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `dev` | `tsx watch src/app.ts` | Development server with hot-reload |
+| `build` | `tsc` | Compile TypeScript to `dist/` |
+| `start` | `node dist/app.js` | Run the compiled production build |
+| `db:push` | `prisma db push` | Sync schema to database |
+| `db:seed` | `tsx prisma/seed.ts` | Seed demo data |
+| `db:studio` | `prisma studio` | Open Prisma Studio GUI |

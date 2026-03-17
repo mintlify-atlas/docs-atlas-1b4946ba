@@ -1,0 +1,88 @@
+---
+title: "Introduction"
+description: "AdVerify SDK — Android ad monetization and device PIN verification system"
+---
+
+# AdVerify SDK
+
+AdVerify is a complete ad monetization and device verification system for Android apps. It combines an Android SDK (zero dependencies), a backend server, and an admin dashboard into a single integrated platform.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Integrate the SDK into your Android app in minutes
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand how the SDK, server, and admin panel work together
+  </Card>
+  <Card title="Android SDK" icon="android" href="/sdk/installation">
+    Installation, configuration, and API reference for the Android library
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/sdk/init">
+    Full REST API documentation for all SDK and admin endpoints
+  </Card>
+</CardGroup>
+
+## What AdVerify does
+
+AdVerify lets Android app developers gate app access behind a monetized verification flow, serve interstitial ads, and track ad performance — all managed from a web dashboard.
+
+<CardGroup cols={2}>
+  <Card title="PIN verification" icon="lock">
+    Require users to complete a monetized flow (view ads/articles) to receive a PIN before accessing the app
+  </Card>
+  <Card title="Interstitial ads" icon="rectangle-ad">
+    Serve full-screen ad dialogs inside the app with image loading and click tracking
+  </Card>
+  <Card title="Impression & click tracking" icon="chart-line">
+    Every ad view and click is recorded in the backend for analytics
+  </Card>
+  <Card title="Admin dashboard" icon="gauge">
+    Manage API keys, ads, PIN configuration, and view verified devices from a Next.js web panel
+  </Card>
+</CardGroup>
+
+## How it works
+
+When your app launches, the SDK calls your backend server to check the device's status:
+
+- If PIN verification is **disabled** or the device is **already verified**, ads are fetched and displayed directly.
+- If PIN verification is **enabled** and the device is **not verified**, a PIN dialog is shown. The user generates a PIN by visiting a monetized link (shortener that redirects through ads), then enters it to unlock the app.
+
+```
+App Launch
+    │
+    ▼
+SDK → POST /api/sdk/init (with deviceId)
+    │
+    ├── pinVerified=true  ──→ Fetch ads → Show AdDialog
+    │
+    └── pinVerified=false ──→ Show PinVerifyDialog
+                                    │
+                                    └── User visits link → gets PIN → enters PIN
+                                            │
+                                            ▼
+                                    POST /api/sdk/verify-pin
+                                            │
+                                            └── Valid → Show ads
+```
+
+## System components
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Android SDK | Java, API 21+ | Zero-dependency library integrated into your app |
+| Backend Server | Express.js, TypeScript, Prisma, PostgreSQL | REST API for device management, ad serving, PIN verification |
+| Admin Panel | Next.js (App Router), TypeScript | Web dashboard for configuration and analytics |
+
+## Integration methods
+
+AdVerify supports two integration paths:
+
+<CardGroup cols={2}>
+  <Card title="Android Studio" icon="code" href="/sdk/android-studio">
+    Standard AAR library integration with Gradle. Recommended for new projects.
+  </Card>
+  <Card title="MT Manager" icon="wrench" href="/sdk/mt-manager">
+    DEX/smali injection for patching existing APKs without source code access.
+  </Card>
+</CardGroup>

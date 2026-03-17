@@ -1,0 +1,118 @@
+---
+title: "PIN configuration"
+description: "Configure PIN verification settings for each Android app"
+---
+
+Each API key has exactly one `PinConfig` record that controls how the SDK's PIN verification dialog behaves for that app. A default config is created automatically when you create an API key.
+
+## Selecting an app
+
+Open **PIN Configuration** in the sidebar. You will see a row of app selector buttons — one per API key. Apps that already have a saved config show a green dot. Click an app to load its current settings into the form.
+
+## Configuration fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `pinEnabled` | `Boolean` | `false` | Master switch. When `false` the SDK skips PIN verification entirely and goes straight to ads |
+| `pinMessage` | `String` | `"Enter PIN to unlock"` | Text shown in the header of the PIN dialog |
+| `maxAttempts` | `Int` | `3` | Maximum number of wrong PIN entries before the user is locked out. Range: 1–20 |
+| `getPinUrl` | `String` | `""` | The monetized shortener URL that the **Get PIN** button opens. Users must visit this URL to receive their PIN |
+| `getPinBtnText` | `String` | `"Get PIN"` | Label for the button that opens the shortener link |
+| `enterPinBtnText` | `String` | `"Enter PIN"` | Label for the button that switches the dialog to PIN entry mode |
+| `expiryMode` | `String` | `"never"` | How long a verified PIN stays valid: `"never"` or `"duration"` |
+| `expiryHours` | `Int` | `24` | Hours until a PIN expires when `expiryMode` is `"duration"` |
+| `tutorialUrl` | `String` | `"https://t.me/EllieTutorials/36"` | URL opened by the **Tutorial** button in the dialog |
+| `pinInfoItems` | `JSON` | `[]` | Array of info cards displayed on the first state of the PIN dialog |
+| `joinLinks` | `JSON` | `[]` | Array of community links shown in the **Join Us** dialog |
+
+## PIN expiry
+
+<Tabs>
+  <Tab title="Never expire">
+    Set `expiryMode` to `"never"`. Once a device verifies its PIN it stays verified permanently. The `expiresAt` field is stored as `null` on the `UserPin` record.
+
+    Use this mode when you want a one-time friction gate — users verify once and never see the dialog again.
+  </Tab>
+  <Tab title="Time-based expiry">
+    Set `expiryMode` to `"duration"` and specify `expiryHours`. After the device verifies, the server sets `expiresAt = usedAt + expiryHours`. On every `POST /api/sdk/init` the server checks whether the PIN has expired and deletes it if so, forcing the user to re-verify.
+
+    The default is 24 hours. The panel displays the duration in a human-readable format (e.g. `1d 0h`).
+
+    <Info>
+      When you switch an app from `"never"` to `"duration"` mode, the server **backfills** `expiresAt` on all existing active PINs that have no expiry. The expiry is calculated from the original `usedAt` timestamp. PINs that would already be past their expiry are expired immediately.
+    </Info>
+
+    <Info>
+      When you switch from `"duration"` back to `"never"`, the server **clears** `expiresAt` on all currently active PINs for that app.
+    </Info>
+  </Tab>
+</Tabs>
+
+## `pinInfoItems` JSON structure
+
+Info items are displayed as icon + text cards on the first state of the PIN verification dialog. The `icon` value maps to one of the Canvas-drawn icons in the SDK.
+
+```json
+[
+  { "icon": "device", "text": "Device Not Registered", "color": "#3b82f6" },
+  { "icon": "hourglass", "text": "Access Duration: 24 Hours" },
+  { "icon": "key", "text": "Automatic Password System" },
+  { "icon": "crown", "text": "Premium Users Only" },
+  { "icon": "warning", "text": "VPN & Emulators Not Allowed" }
+]
+```
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `icon` | Yes | One of `device`, `info`, `clock`, `hourglass`, `key`, `sparkle`, `star`, `crown`, `warning`, `shield-x` |
+| `text` | Yes | The label shown next to the icon |
+| `color` | No | Hex color override for the icon dot. Falls back to the icon's default color if omitted |
+
+Available icon values and their default colors:
+
+| Icon value | Alias | Default color |
+|------------|-------|---------------|
+| `device` | `info` | `#3b82f6` (blue) |
+| `clock` | `hourglass` | `#22c55e` (green) |
+| `key` | `sparkle` | `#8b5cf6` (violet) |
+| `star` | `crown` | `#eab308` (amber) |
+| `warning` | `shield-x` | `#ef4444` (red) |
+
+## `joinLinks` JSON structure
+
+Join links are shown in the community dialog that appears when the user taps the **Join Us** button.
+
+```json
+[
+  {
+    "name": "OTT Mods",
+    "description": "Telegram Group",
+    "url": "https://t.me/ottmods",
+    "iconType": "telegram"
+  },
+  {
+    "name": "Public Channel",
+    "description": "Apps & Mods",
+    "url": "https://t.me/publicchannel",
+    "iconType": "channel"
+  }
+]
+```
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `name` | Yes | Display name for the link |
+| `description` | No | Subtitle shown below the name |
+| `url` | Yes | URL opened when the user taps the entry |
+| `iconType` | No | `"telegram"` (paper plane icon) or `"channel"` (megaphone icon) |
+
+## Saving configuration
+
+Click **Save Configuration** at the bottom of the form. This sends `POST /api/admin/pin-config` with the full config and the `apiKeyId`. The server performs an upsert — it creates the record if one does not exist, or updates the existing one.
+
+## API reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/admin/pin-config` | List PIN configs for all apps |
+| `POST` | `/api/admin/pin-config` | Create or update a PIN config (upsert by `apiKeyId`) |

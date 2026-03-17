@@ -1,0 +1,91 @@
+---
+title: "GET /api/sdk/ads"
+description: "Fetch the list of active ads configured for the app."
+---
+
+# GET /api/sdk/ads
+
+Returns all active ad creatives associated with the API key, ordered by `priority` descending. The SDK uses this list to display interstitial ads after the PIN gate is passed (or immediately on launch when PIN is disabled).
+
+## Authentication
+
+Requires an `x-api-key` header containing a valid, active API key.
+
+## Request
+
+No request body. This is a `GET` request.
+
+## Response
+
+<ResponseField name="ads" type="array">
+  Array of active `Ad` objects ordered by `priority` descending. Returns an empty array if no ads are configured or active.
+
+  <Expandable title="Ad object fields">
+    <ResponseField name="id" type="number">
+      Unique numeric identifier for the ad.
+    </ResponseField>
+    <ResponseField name="title" type="string">
+      Headline text displayed in the ad dialog.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Body copy displayed below the title.
+    </ResponseField>
+    <ResponseField name="imageUrl" type="string">
+      URL of the background image loaded into the ad dialog. May be an empty string if no image is set.
+    </ResponseField>
+    <ResponseField name="redirectUrl" type="string">
+      URL opened when the user taps the action button.
+    </ResponseField>
+    <ResponseField name="buttonText" type="string">
+      Label on the action button (e.g. `"Visit Now"`).
+    </ResponseField>
+    <ResponseField name="adType" type="string">
+      Format of the ad. Currently `"interstitial"` for dialog-based ads.
+    </ResponseField>
+    <ResponseField name="priority" type="number">
+      Display priority. Higher values are returned first. Use this to control the order ads are shown.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+```bash
+curl -X GET https://your-server.com/api/sdk/ads \
+  -H "x-api-key: YOUR_API_KEY"
+```
+
+```json Response
+{
+  "ads": [
+    {
+      "id": 7,
+      "title": "Try Premium Today",
+      "description": "Unlock all features with a 7-day free trial.",
+      "imageUrl": "https://cdn.example.com/ads/premium-banner.jpg",
+      "redirectUrl": "https://example.com/premium",
+      "buttonText": "Start Free Trial",
+      "adType": "interstitial",
+      "priority": 10
+    },
+    {
+      "id": 3,
+      "title": "Download Our App",
+      "description": "Available on Android. Zero ads, zero cost.",
+      "imageUrl": "https://cdn.example.com/ads/app-download.jpg",
+      "redirectUrl": "https://play.google.com/store/apps/details?id=com.example.app",
+      "buttonText": "Download Free",
+      "adType": "interstitial",
+      "priority": 5
+    }
+  ]
+}
+```
+
+## Errors
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| `401` | `API key is required` | The `x-api-key` header was not included in the request. |
+| `403` | `Invalid or inactive API key` | The provided API key does not exist or has been deactivated. |
+| `500` | — | An unexpected server error occurred. |

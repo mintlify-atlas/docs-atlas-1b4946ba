@@ -1,0 +1,79 @@
+---
+title: "POST /api/sdk/create-link"
+description: "Create a paidappstore.com shortener link that the user visits to earn a PIN."
+---
+
+# POST /api/sdk/create-link
+
+Generates a monetized verification link via the paidappstore.com shortener API. The returned URL is opened in the device's browser, where the user views ads or articles to complete the verification flow. At the end of the flow, the shortener backend calls [`POST /api/sdk/generate-pin`](/api-reference/sdk/generate-pin) to issue a PIN tied to the device, which the user then enters in the app.
+
+This endpoint is called by the SDK when the user taps the "Get PIN" button in the PIN verification dialog.
+
+## Authentication
+
+Requires an `x-api-key` header containing a valid, active API key.
+
+## Request
+
+<ParamField body="deviceId" type="string" required>
+  The device's unique identifier (Android ID). Embedded in the shortener link so the generated PIN is bound to this device.
+</ParamField>
+
+## Response
+
+<ResponseField name="url" type="string">
+  The full shortener URL to open in the browser (e.g. `https://paidappstore.com/verify/abc123`). The user visits this link, completes the ad/article flow, and receives their PIN.
+</ResponseField>
+
+## Example
+
+```bash
+curl -X POST https://your-server.com/api/sdk/create-link \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"deviceId": "a1b2c3d4e5f6"}'
+```
+
+```json Response
+{
+  "url": "https://paidappstore.com/verify/f7g8h9"
+}
+```
+
+## Verification Flow
+
+```
+SDK calls /api/sdk/create-link
+        │
+        ▼
+  Server requests shortener link from paidappstore.com API
+  (embeds apiKey + deviceId in the link payload)
+        │
+        ▼
+  Returns { url } to the SDK
+        │
+        ▼
+  SDK opens URL in browser
+        │
+        ▼
+  User completes ad/article pages
+        │
+        ▼
+  Shortener backend calls POST /api/sdk/generate-pin
+  with { apiKey, deviceId }
+        │
+        ▼
+  PIN is created and shown to the user
+        │
+        ▼
+  User enters PIN in the app → POST /api/sdk/verify-pin
+```
+
+## Errors
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| `400` | `deviceId is required` | The `deviceId` field was not included in the request body. |
+| `401` | `API key is required` | The `x-api-key` header was not included in the request. |
+| `403` | `Invalid or inactive API key` | The provided API key does not exist or has been deactivated. |
+| `500` | `Failed to create link` | The shortener API returned an error or was unreachable. |

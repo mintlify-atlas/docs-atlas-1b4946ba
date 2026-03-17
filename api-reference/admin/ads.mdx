@@ -1,0 +1,308 @@
+---
+title: "Ads"
+description: "Create, list, update, and delete ad records served to SDK clients."
+---
+
+Ads are the content units served to SDK clients. Each ad belongs to a single API key, has a type (`interstitial`, `banner`, or `dialog`), and accumulates impression and click counts over time. The list endpoint includes those counts in the response.
+
+**Authentication**: HTTP Basic Auth required on all endpoints — see [Authentication](/api-reference/admin/auth).
+
+---
+
+## GET /api/admin/ads
+
+Returns all ads ordered by creation date descending. Each record includes the parent app name and aggregated impression/click counts.
+
+### Request
+
+No parameters.
+
+### Response
+
+An array of ad objects.
+
+<ResponseField name="id" type="integer" required>
+  Unique numeric identifier for the ad.
+</ResponseField>
+
+<ResponseField name="apiKeyId" type="integer" required>
+  ID of the API key (application) this ad belongs to.
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  Display title of the ad.
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  Ad body text. Defaults to an empty string.
+</ResponseField>
+
+<ResponseField name="imageUrl" type="string" required>
+  URL of the ad image. Defaults to an empty string.
+</ResponseField>
+
+<ResponseField name="redirectUrl" type="string" required>
+  URL opened when the user taps the ad or its button. Defaults to an empty string.
+</ResponseField>
+
+<ResponseField name="adType" type="string" required>
+  Layout type. One of `interstitial`, `banner`, or `dialog`. Defaults to `interstitial`.
+</ResponseField>
+
+<ResponseField name="buttonText" type="string" required>
+  Label for the call-to-action button. Defaults to `"Visit Now"`.
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean" required>
+  Whether this ad is eligible to be served. Defaults to `true`.
+</ResponseField>
+
+<ResponseField name="priority" type="integer" required>
+  Sort weight used when selecting which ad to serve. Higher values take precedence. Defaults to `0`.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="apiKey" type="object" required>
+  Partial API key record included for display purposes.
+  <Expandable title="apiKey">
+    <ResponseField name="appName" type="string" required>
+      Name of the application that owns this ad.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="_count" type="object" required>
+  Aggregated engagement totals.
+  <Expandable title="_count">
+    <ResponseField name="impressions" type="integer" required>
+      Total number of times this ad has been displayed.
+    </ResponseField>
+    <ResponseField name="clicks" type="integer" required>
+      Total number of times the ad button has been tapped.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET https://your-server.com/api/admin/ads \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+[
+  {
+    "id": 7,
+    "apiKeyId": 3,
+    "title": "Summer Sale",
+    "description": "Get 20% off all plans this summer.",
+    "imageUrl": "https://cdn.example.com/ads/summer.png",
+    "redirectUrl": "https://example.com/sale",
+    "adType": "interstitial",
+    "buttonText": "Claim Offer",
+    "isActive": true,
+    "priority": 10,
+    "createdAt": "2025-06-01T08:00:00.000Z",
+    "apiKey": { "appName": "My Android App" },
+    "_count": { "impressions": 5420, "clicks": 310 }
+  }
+]
+```
+
+---
+
+## POST /api/admin/ads
+
+Creates a new ad. The `apiKeyId` and `title` fields are required; all others are optional and fall back to their schema defaults.
+
+### Request
+
+<ParamField body="apiKeyId" type="integer" required>
+  ID of the API key (application) this ad belongs to.
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  Display title shown in the ad unit. Minimum 1 character.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Body text for the ad. Defaults to `""`.
+</ParamField>
+
+<ParamField body="imageUrl" type="string">
+  Fully-qualified URL for the ad image. Defaults to `""`.
+</ParamField>
+
+<ParamField body="redirectUrl" type="string">
+  URL opened on button tap. Defaults to `""`.
+</ParamField>
+
+<ParamField body="adType" type="string">
+  Layout type. One of `interstitial`, `banner`, or `dialog`. Defaults to `"interstitial"`.
+</ParamField>
+
+<ParamField body="buttonText" type="string">
+  Call-to-action button label. Defaults to `"Visit Now"`.
+</ParamField>
+
+<ParamField body="priority" type="integer">
+  Numeric sort weight. Higher value = served first when multiple ads are eligible. Defaults to `0`.
+</ParamField>
+
+### Response
+
+The newly created ad object (same shape as items in the list response, without `apiKey` and `_count`).
+
+### Example
+
+```bash
+curl -X POST https://your-server.com/api/admin/ads \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiKeyId": 3,
+    "title": "Summer Sale",
+    "description": "Get 20% off all plans this summer.",
+    "imageUrl": "https://cdn.example.com/ads/summer.png",
+    "redirectUrl": "https://example.com/sale",
+    "adType": "interstitial",
+    "buttonText": "Claim Offer",
+    "priority": 10
+  }'
+```
+
+**200 OK**
+
+```json
+{
+  "id": 7,
+  "apiKeyId": 3,
+  "title": "Summer Sale",
+  "description": "Get 20% off all plans this summer.",
+  "imageUrl": "https://cdn.example.com/ads/summer.png",
+  "redirectUrl": "https://example.com/sale",
+  "adType": "interstitial",
+  "buttonText": "Claim Offer",
+  "isActive": true,
+  "priority": 10,
+  "createdAt": "2025-06-01T08:00:00.000Z"
+}
+```
+
+---
+
+## PATCH /api/admin/ads/:id
+
+Partially updates an existing ad. Only fields present in the request body are modified. `isActive` can be toggled here (it is read-only on creation).
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the ad to update.
+</ParamField>
+
+### Request
+
+<ParamField body="title" type="string">
+  New display title.
+</ParamField>
+
+<ParamField body="description" type="string">
+  New body text.
+</ParamField>
+
+<ParamField body="imageUrl" type="string">
+  New image URL.
+</ParamField>
+
+<ParamField body="redirectUrl" type="string">
+  New redirect URL.
+</ParamField>
+
+<ParamField body="adType" type="string">
+  New layout type. One of `interstitial`, `banner`, or `dialog`.
+</ParamField>
+
+<ParamField body="buttonText" type="string">
+  New button label.
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Set to `false` to pause the ad without deleting it. Set to `true` to resume serving it.
+</ParamField>
+
+<ParamField body="priority" type="integer">
+  Updated sort weight.
+</ParamField>
+
+### Response
+
+The updated ad object.
+
+### Example
+
+```bash
+curl -X PATCH https://your-server.com/api/admin/ads/7 \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk" \
+  -H "Content-Type: application/json" \
+  -d '{"isActive": false, "priority": 0}'
+```
+
+**200 OK**
+
+```json
+{
+  "id": 7,
+  "apiKeyId": 3,
+  "title": "Summer Sale",
+  "description": "Get 20% off all plans this summer.",
+  "imageUrl": "https://cdn.example.com/ads/summer.png",
+  "redirectUrl": "https://example.com/sale",
+  "adType": "interstitial",
+  "buttonText": "Claim Offer",
+  "isActive": false,
+  "priority": 0,
+  "createdAt": "2025-06-01T08:00:00.000Z"
+}
+```
+
+---
+
+## DELETE /api/admin/ads/:id
+
+Permanently deletes an ad and all its associated impression and click records.
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the ad to delete.
+</ParamField>
+
+### Request
+
+No request body.
+
+### Response
+
+<ResponseField name="status" type="string" required>
+  Always `"deleted"` on success.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X DELETE https://your-server.com/api/admin/ads/7 \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+{ "status": "deleted" }
+```

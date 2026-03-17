@@ -1,0 +1,77 @@
+---
+title: "Authentication"
+description: "Verify admin credentials and retrieve identity information for the current session."
+---
+
+## GET /api/admin/me
+
+Verifies the admin credentials supplied in the request and returns the authenticated identity. Use this endpoint to confirm that a token is valid before making other admin calls, or to display the current logged-in username in a dashboard UI.
+
+**Authentication**: HTTP Basic Auth — `Authorization: Basic <base64(username:password)>`
+
+All admin endpoints are protected by the `adminAuth` middleware. The middleware reads the `Authorization` header, expects the `Basic` scheme, base64-decodes the credentials, and compares them against the `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables. There is no session or token issued — credentials must be sent with every request.
+
+- If the `Authorization` header is absent or does not start with `Basic `, the server responds with **401**.
+- If the username or password does not match the configured values, the server responds with **403**.
+
+### How to pass credentials
+
+Encode `username:password` in base64 and place it in the `Authorization` header:
+
+```bash
+# Encode credentials
+echo -n "admin:yourpassword" | base64
+# => YWRtaW46eW91cnBhc3N3b3Jk
+```
+
+Then include that value in every request:
+
+```
+Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk
+```
+
+### Request
+
+No request body or query parameters.
+
+### Response
+
+<ResponseField name="authenticated" type="boolean" required>
+  Always `true` when the request succeeds. A `false` value is never returned — invalid credentials produce a 401/403 error instead.
+</ResponseField>
+
+<ResponseField name="username" type="string" required>
+  The admin username as configured in the `ADMIN_USERNAME` environment variable.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET https://your-server.com/api/admin/me \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+{
+  "authenticated": true,
+  "username": "admin"
+}
+```
+
+**401 Unauthorized** — missing or malformed `Authorization` header
+
+```json
+{
+  "error": "Admin authentication required"
+}
+```
+
+**403 Forbidden** — credentials do not match
+
+```json
+{
+  "error": "Invalid admin credentials"
+}
+```

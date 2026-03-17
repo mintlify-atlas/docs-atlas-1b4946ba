@@ -1,0 +1,260 @@
+---
+title: "User PINs"
+description: "List, inspect, revoke, and expire device PIN records across all applications."
+---
+
+User PINs are bound to a `(apiKeyId, deviceId, pin)` triple. A PIN is generated when a device requests one and marked as used (`isUsed: true`, `usedAt` set) when the device redeems it. Depending on the PIN config `expiryMode`, a PIN may have an `expiresAt` timestamp after which it is considered expired.
+
+**Authentication**: HTTP Basic Auth required on all endpoints — see [Authentication](/api-reference/admin/auth).
+
+---
+
+## GET /api/admin/user-pins
+
+Returns up to 100 user PIN records ordered by creation date descending. Filter by application using the `apiKeyId` query parameter.
+
+### Request
+
+<ParamField query="apiKeyId" type="integer">
+  When provided, only PIN records belonging to this API key are returned.
+</ParamField>
+
+### Response
+
+An array of user PIN objects.
+
+<ResponseField name="id" type="integer" required>
+  Unique numeric identifier for the PIN record.
+</ResponseField>
+
+<ResponseField name="apiKeyId" type="integer" required>
+  ID of the API key (application) this PIN belongs to.
+</ResponseField>
+
+<ResponseField name="deviceId" type="string" required>
+  The Android ID of the device this PIN was generated for.
+</ResponseField>
+
+<ResponseField name="pin" type="string" required>
+  The PIN value.
+</ResponseField>
+
+<ResponseField name="isUsed" type="boolean" required>
+  `true` if the device has successfully redeemed this PIN.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of when the PIN was generated.
+</ResponseField>
+
+<ResponseField name="usedAt" type="string | null" required>
+  ISO 8601 timestamp of when the PIN was first redeemed. `null` if not yet used.
+</ResponseField>
+
+<ResponseField name="expiresAt" type="string | null" required>
+  ISO 8601 timestamp after which the PIN is considered expired. `null` if the PIN config `expiryMode` is `"never"`.
+</ResponseField>
+
+<ResponseField name="apiKey" type="object" required>
+  Partial API key record for display purposes.
+  <Expandable title="apiKey">
+    <ResponseField name="appName" type="string" required>
+      Name of the application that owns this PIN.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET "https://your-server.com/api/admin/user-pins?apiKeyId=3" \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+[
+  {
+    "id": 1042,
+    "apiKeyId": 3,
+    "deviceId": "a1b2c3d4e5f6a7b8",
+    "pin": "482910",
+    "isUsed": true,
+    "createdAt": "2025-10-01T12:00:00.000Z",
+    "usedAt": "2025-10-01T12:05:33.000Z",
+    "expiresAt": "2025-10-04T12:05:33.000Z",
+    "apiKey": { "appName": "My Android App" }
+  }
+]
+```
+
+---
+
+## GET /api/admin/user-pins/stats
+
+Returns PIN usage statistics for a given day, including comparisons with the previous day and all-time active/expired counts.
+
+### Request
+
+<ParamField query="date" type="string">
+  Target date in `YYYY-MM-DD` format. Defaults to today (server local time) if omitted.
+</ParamField>
+
+### Response
+
+<ResponseField name="date" type="string" required>
+  The date for which stats are reported, in `YYYY-MM-DD` format.
+</ResponseField>
+
+<ResponseField name="todayGenerated" type="integer" required>
+  Number of new PIN records created on the target date.
+</ResponseField>
+
+<ResponseField name="todayUsed" type="integer" required>
+  Number of PIN records created on the target date that have been redeemed (`isUsed: true`).
+</ResponseField>
+
+<ResponseField name="yesterdayGenerated" type="integer" required>
+  Number of new PIN records created on the day before the target date.
+</ResponseField>
+
+<ResponseField name="yesterdayUsed" type="integer" required>
+  Number of PIN records created the day before the target date that have been redeemed.
+</ResponseField>
+
+<ResponseField name="totalActive" type="integer" required>
+  All-time count of PINs that are used and not yet expired (`isUsed: true` and either `expiresAt` is null or `expiresAt` is in the future).
+</ResponseField>
+
+<ResponseField name="totalExpired" type="integer" required>
+  All-time count of PINs that are used and past their expiry (`isUsed: true` and `expiresAt` is in the past).
+</ResponseField>
+
+### Example
+
+```bash
+curl -X GET "https://your-server.com/api/admin/user-pins/stats?date=2025-10-01" \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+{
+  "date": "2025-10-01",
+  "todayGenerated": 312,
+  "todayUsed": 289,
+  "yesterdayGenerated": 298,
+  "yesterdayUsed": 271,
+  "totalActive": 7843,
+  "totalExpired": 1240
+}
+```
+
+---
+
+## DELETE /api/admin/user-pins/:id
+
+Permanently deletes a single PIN record. This does not affect other PIN records for the same device.
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the PIN record to delete.
+</ParamField>
+
+### Request
+
+No request body.
+
+### Response
+
+<ResponseField name="status" type="string" required>
+  Always `"deleted"` on success.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X DELETE https://your-server.com/api/admin/user-pins/1042 \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+{ "status": "deleted" }
+```
+
+---
+
+## POST /api/admin/user-pins/revoke
+
+Deletes **all** PIN records for a specific device under a specific API key. Use this to force a device to re-acquire a PIN, for example when a user loses access or needs to be removed.
+
+### Request
+
+<ParamField body="apiKeyId" type="integer" required>
+  ID of the API key (application) to scope the revocation to.
+</ParamField>
+
+<ParamField body="deviceId" type="string" required>
+  The Android ID of the device whose PINs should be deleted.
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string" required>
+  Always `"revoked"` on success.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://your-server.com/api/admin/user-pins/revoke \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk" \
+  -H "Content-Type: application/json" \
+  -d '{"apiKeyId": 3, "deviceId": "a1b2c3d4e5f6a7b8"}'
+```
+
+**200 OK**
+
+```json
+{ "status": "revoked" }
+```
+
+---
+
+## POST /api/admin/user-pins/:id/expire
+
+Manually expires a single PIN record immediately. Sets `expiresAt` to now, `isUsed` to `true`, and `usedAt` to now. After this call the PIN will no longer be accepted by the SDK.
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the PIN record to expire.
+</ParamField>
+
+### Request
+
+No request body.
+
+### Response
+
+<ResponseField name="status" type="string" required>
+  Always `"expired"` on success.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://your-server.com/api/admin/user-pins/1042/expire \
+  -H "Authorization: Basic YWRtaW46eW91cnBhc3N3b3Jk"
+```
+
+**200 OK**
+
+```json
+{ "status": "expired" }
+```

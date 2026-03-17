@@ -1,0 +1,91 @@
+---
+title: "Ads"
+description: "Create and manage ad creatives served to Android devices"
+---
+
+Ads are the creatives served to Android devices by the SDK. Each ad belongs to one API key (app), and the SDK fetches active ads for the matching key via `GET /api/sdk/ads`.
+
+## The `Ad` model
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | `Int` | auto | Auto-incremented primary key |
+| `apiKeyId` | `Int` | — | Foreign key linking the ad to an API key (app) |
+| `title` | `String` | — | Ad headline shown in the dialog |
+| `description` | `String` | `""` | Supporting body text shown below the title |
+| `imageUrl` | `String` | `""` | URL of the banner/background image. Loaded by the SDK via `HttpURLConnection` |
+| `redirectUrl` | `String` | `""` | URL opened when the user taps the action button |
+| `adType` | `String` | `"interstitial"` | Display format: `interstitial`, `banner`, or `dialog` |
+| `buttonText` | `String` | `"Visit Now"` | Label on the action button |
+| `priority` | `Int` | `0` | Sort order: higher numbers are served first |
+| `isActive` | `Boolean` | `true` | Inactive ads are excluded from the SDK feed |
+| `createdAt` | `DateTime` | now | Timestamp of ad creation |
+
+## Ad types
+
+| Value | Behaviour |
+|-------|-----------|
+| `interstitial` | Full-screen dialog that appears between app interactions |
+| `banner` | Compact strip shown inline within app content |
+| `dialog` | Modal dialog (similar to interstitial but can be triggered manually) |
+
+## Creating an ad
+
+<Steps>
+  <Step title="Open the Ads section">
+    Navigate to **Ads** in the sidebar.
+  </Step>
+
+  <Step title="Click New Ad">
+    Click the **New Ad** button. A form modal opens.
+  </Step>
+
+  <Step title="Select the app">
+    Choose the API key (app) this ad belongs to from the **App** dropdown. An ad is always scoped to exactly one app.
+  </Step>
+
+  <Step title="Fill in the creative fields">
+    - **Title** — Required. The main heading text.
+    - **Description** — Supporting body copy.
+    - **Image URL** — A publicly accessible image URL. The SDK downloads this image using `HttpURLConnection` and renders it as the dialog background.
+    - **Redirect URL** — Where the user is sent when they tap the action button.
+    - **Type** — `interstitial`, `banner`, or `dialog`.
+    - **Button Text** — Action button label (defaults to `"Visit Now"`).
+    - **Priority** — Integer from 1–10. Higher values are served before lower ones.
+  </Step>
+
+  <Step title="Submit">
+    Click **Create Ad**. The ad is immediately visible in the table and served on the next SDK `GET /api/sdk/ads` call.
+  </Step>
+</Steps>
+
+<Note>
+  The image at `imageUrl` is fetched directly by the Android device at display time. Make sure the URL is publicly accessible and returns a valid image. If the image fails to load, the SDK shows the dialog without a background image.
+</Note>
+
+## Priority ordering
+
+When the SDK requests ads, the server returns all active ads for the app ordered by `priority` descending. An ad with `priority = 10` is always served before an ad with `priority = 1`. Ads with equal priority are ordered by `createdAt` descending.
+
+## Tracking impressions and clicks
+
+Every time the SDK renders an ad it sends `POST /api/sdk/impression`. Every time a user taps the action button it sends `POST /api/sdk/click`. The admin panel shows the cumulative counts for each ad in the **Impressions** and **Clicks** columns.
+
+These counts feed into the overall CTR displayed on the dashboard.
+
+## Enabling and disabling an ad
+
+Click **Disable** or **Enable** in the ad row. This sends `PATCH /api/admin/ads/:id` with `{ "isActive": false/true }`. Disabled ads are excluded from the SDK feed immediately.
+
+## Deleting an ad
+
+Click **Delete** on the ad row. This sends `DELETE /api/admin/ads/:id` and permanently removes the ad and all its impression and click records.
+
+## API reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/admin/ads` | List all ads (includes impression/click counts and app name) |
+| `POST` | `/api/admin/ads` | Create a new ad |
+| `PATCH` | `/api/admin/ads/:id` | Update any ad field |
+| `DELETE` | `/api/admin/ads/:id` | Delete an ad and all its tracking data |

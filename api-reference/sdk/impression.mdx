@@ -1,0 +1,52 @@
+---
+title: "POST /api/sdk/impression"
+description: "Record an ad impression when an ad is displayed to a user."
+---
+
+# POST /api/sdk/impression
+
+Records that an ad was shown to a user. Call this endpoint as soon as the ad dialog becomes visible. Impression data is stored in the database and aggregated in the admin dashboard to report reach and frequency metrics.
+
+## Authentication
+
+Requires an `x-api-key` header containing a valid, active API key.
+
+## Request
+
+<ParamField body="adId" type="number" required>
+  The numeric ID of the ad that was displayed. Obtained from the `id` field in the [`GET /api/sdk/ads`](/api-reference/sdk/ads) response.
+</ParamField>
+
+<ParamField body="deviceId" type="string">
+  The device's unique identifier (Android ID). Optional but recommended for per-device frequency analytics.
+</ParamField>
+
+## Response
+
+<ResponseField name="status" type="string">
+  Always `"ok"` on success.
+</ResponseField>
+
+## Example
+
+```bash
+curl -X POST https://your-server.com/api/sdk/impression \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"adId": 7, "deviceId": "a1b2c3d4e5f6"}'
+```
+
+```json Response
+{
+  "status": "ok"
+}
+```
+
+## Errors
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| `401` | `API key is required` | The `x-api-key` header was not included in the request. |
+| `403` | `Invalid or inactive API key` | The provided API key does not exist or has been deactivated. |
+| `422` | Validation error | `adId` is missing or not a number. |
+| `500` | — | An unexpected server error occurred. |

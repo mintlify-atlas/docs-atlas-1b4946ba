@@ -1,0 +1,120 @@
+---
+title: "Dialogs"
+description: "Built-in dialog UI components included with AdVerify SDK"
+---
+
+AdVerify ships three dialog components that cover the complete user-facing flow: PIN verification, ad display, and community links. All dialogs are constructed entirely in Java using Android's `Canvas`, `Paint`, `Path`, and `GradientDrawable` APIs — there are no XML layout files and no external dependencies.
+
+**Common visual theme across all dialogs:**
+- Background: `#fafafa` (off-white)
+- Primary buttons: solid `#111111` with white text
+- Corner radius: 18–20 dp rounded card
+- Entrance animation: fade + scale from 0.95× to 1× over 200 ms (`DecelerateInterpolator`)
+- Button feedback: `RippleDrawable` on all interactive elements
+
+---
+
+## PinVerifyDialog
+
+A two-state dialog that gates app access behind a PIN verification step. It is shown automatically by `AdLoader` when the server reports `pinEnabled=true` and `pinVerified=false` for the current device.
+
+### State 1: Info screen
+
+The initial state presents the device verification requirement:
+
+- **Shield icon** — a Canvas-drawn black shield with a white padlock and keyhole, including a subtle shadow offset.
+- **Title** — configurable via the `appName` field from the server response, defaults to `"Device Verification"`.
+- **Subtitle** — configurable via `pinMessage`, defaults to `"Verify your device to continue"`.
+- **Info card** — a white rounded card with a 1 dp `#eeeeee` border. Each row shows a colored icon dot (30×30 dp, rounded rect) and a text label. The first row has a blue `PENDING` badge.
+- **Get PIN button** — solid `#111111`, full weight, calls `AdClient.createLink()` to open a monetized shortener URL in the browser, then switches to State 2.
+- **Enter PIN button** — outlined (white fill, 1 dp `#dddddd` stroke), equal weight alongside Get PIN, switches directly to State 2.
+- **Tutorial / Join Us row** — ghost buttons (white fill, `#eeeeee` border) that open the tutorial URL or the `JoinDialog` respectively.
+- **Exit button** — text-style pill with `#ee5555` text and a `#ffeeee` border, calls `activity.finish()`.
+
+### State 2: PIN entry screen
+
+After Get PIN or Enter PIN is tapped, the info card and buttons slide out and the PIN entry state fades in:
+
+- **Instruction text** — `"Enter the PIN from your browser"` in muted gray.
+- **PIN input field** — monospace typeface, centered, number-password input type, letter spacing 0.3, white fill with `#dddddd` border.
+- **Error text** — shown in `#ee5555` below the input on failed verification attempts.
+- **Attempts counter** — displayed in monospace gray when at least one failed attempt has occurred, e.g. `"2 attempts remaining"`.
+- **Verify button** — solid `#111111`, full width, calls `/api/sdk/verify-pin`. Shows `"Verifying..."` at 45% opacity while the request is in flight.
+- **Back button** — text-only with an arrow, returns to State 1.
+
+When `maxAttempts` is reached the dialog is dismissed and `AdVerifyCallback.onError("Max PIN attempts reached")` is called.
+
+### Info card icon types
+
+The colored dot icons in the info card are drawn with Canvas using the `icon` field from the server's `pinInfoItems` array. The following values are recognized:
+
+| Icon value | Drawing | Dot background | Icon color |
+|---|---|---|---|
+| `device` / `info` | Phone outline with signal wave arc | `#eef6ff` | Blue `#3b82f6` |
+| `clock` / `hourglass` | Hourglass frame with sand fill | `#eefbf4` | Green `#22c55e` |
+| `key` / `sparkle` | Key with shaft, teeth, and sparkle star | `#f3f0ff` | Violet `#8b5cf6` |
+| `star` / `crown` | Crown shape with gem circle | `#fefce8` | Amber `#eab308` |
+| `warning` / `shield-x` | Shield outline with X mark | `#fef2f2` | Red `#ef4444` |
+
+Any unrecognized icon value falls back to a small filled circle in neutral gray.
+
+---
+
+## AdDialog
+
+An interstitial ad dialog displayed after the device clears PIN verification (or immediately if PIN is disabled). It shows a single ad fetched from `/api/sdk/ads`.
+
+### UI layout
+
+- **Image section** (conditional) — a 160 dp tall `ImageView` with `CENTER_CROP` scale type and a `#eeeeee` background placeholder. The image is loaded asynchronously via `HttpURLConnection` on a background thread with a 5-second timeout and posted to the UI thread via `runOnUiThread()`.
+- **Title** — bold, 17 sp, `#111111`, displayed below the image.
+- **Description** (conditional) — 13 sp, `#888888`, 1.35× line spacing.
+- **Divider** — 1 dp `#f2f2f2` horizontal line separating the content from the button row.
+- **Close button** — text-only, `#999999`, left-aligned in the button row. Dismisses the dialog.
+- **CTA button** — solid `#111111`, bold, right-aligned. The button label comes from the ad's `buttonText` field (default `"Visit Now"`). Tapping opens `redirectUrl` in the browser, fires `onAdClicked()`, and dismisses the dialog.
+
+The dialog window is 340 dp wide with transparent background and 20 dp corner radius applied via `ViewOutlineProvider` for proper clip-to-outline behavior.
+
+### Lifecycle
+
+- Shown: `AdVerifyCallback.onAdShown()` fires immediately after `dialog.show()`.
+- Closed via Close button or back press: `AdVerifyCallback.onAdClosed()` fires from the `OnDismissListener`.
+- CTA clicked: `AdVerifyCallback.onAdClicked(redirectUrl)` fires before the dialog is dismissed.
+
+---
+
+## JoinDialog
+
+A community links sheet triggered by the "Join Us" button in `PinVerifyDialog`. It displays a list of `JoinLink` entries from the server, each linking to a Telegram group or channel.
+
+### UI layout
+
+- **Community icon** — a 44×44 dp Canvas-drawn circle with `#eef6ff` fill and `#dce8f4` border. Two person silhouettes are drawn in blue (`#3b82f6`): a foreground figure at full opacity and a background figure at ~40% opacity.
+- **Title** — `"Join Our Community"`, 16 sp bold, `#111111`.
+- **Subtitle** — `"Get updates, mods & support"`, 12 sp, `#999999`.
+- **Link cards** — one card per `JoinLink` entry. Each card is a white rounded rect (12 dp corners, 1 dp `#eeeeee` border) with `RippleDrawable` feedback. Cards contain:
+  - **Icon** (36×36 dp) — drawn by Canvas based on `iconType`:
+    - `telegram` — paper plane icon on `#e8f4fd` background in Telegram blue `#0088cc`
+    - `channel` — megaphone with sound wave on `#eef8ee` background in green `#22c55e`
+  - **Name** — 13 sp bold, `#222222`.
+  - **Description** — 11 sp, `#999999` (hidden if empty).
+  - **Arrow** — `›` chevron in `#cccccc`, right-aligned.
+  - Tapping the card opens `link.url` via `Intent.ACTION_VIEW`.
+- **Close button** — full-width, white fill with `#eeeeee` border.
+
+The dialog is 310 dp wide, cancelable (tap outside to dismiss), and uses the same 200 ms fade+scale entrance animation as the other dialogs.
+
+---
+
+## Programmatic rendering
+
+All dialogs are built entirely at runtime with no XML resources. This means:
+
+- No `res/layout/` files are included in the AAR.
+- No `res/drawable/` assets — every shape and icon is drawn procedurally.
+- No dependency on AppCompat, Material Components, or any third-party view library.
+- The AAR size stays minimal and there is no risk of resource ID conflicts when embedding in a patched APK.
+
+<Info>
+  Because views are constructed programmatically, dialog appearances are not affected by the host app's theme attributes. The hardcoded color palette (`#fafafa`, `#111111`, `#3b82f6`, etc.) is always applied regardless of the host app's light/dark mode setting.
+</Info>

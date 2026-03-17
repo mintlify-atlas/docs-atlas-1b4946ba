@@ -1,0 +1,77 @@
+---
+title: "API keys"
+description: "Create and manage API keys for each Android app"
+---
+
+Each Android app you integrate with AdVerify needs its own API key. The key identifies the app to the server and scopes all data — ads, PIN configuration, impressions, clicks, and user PINs — to that specific app.
+
+## The `ApiKey` model
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Int` | Auto-incremented primary key |
+| `key` | `String` | 32-character hex string, auto-generated on creation, unique across all keys |
+| `appName` | `String` | Human-readable name shown in the panel (e.g. `"OTT Stream"`) |
+| `packageName` | `String` | Android package name (e.g. `"com.example.app"`). Optional but recommended for identification |
+| `isActive` | `Boolean` | When `false`, the server rejects all SDK requests that carry this key |
+| `createdAt` | `DateTime` | Timestamp of key creation |
+
+Creating a key automatically creates a linked `PinConfig` record with default values, so you can configure PIN verification immediately after.
+
+## Creating an API key
+
+<Steps>
+  <Step title="Open the API Keys section">
+    Navigate to **API Keys** in the sidebar. If no keys exist yet, you will see an empty state with a **Create Key** button.
+  </Step>
+
+  <Step title="Click New Key">
+    Click the **New Key** button in the page header. A modal opens with two fields.
+  </Step>
+
+  <Step title="Fill in the app details">
+    - **App Name** — A display label for the key. Required.
+    - **Package Name** — The Android package identifier (e.g. `com.example.myapp`). Required in the form; stored as an empty string if omitted via the API.
+  </Step>
+
+  <Step title="Submit">
+    Click **Create Key**. The server generates a random 32-character hex key and returns the new record. The key appears in the table immediately and can be copied to clipboard by clicking on it.
+  </Step>
+</Steps>
+
+## Using the key in the SDK
+
+Pass the key as the `x-api-key` header on every request from the Android SDK:
+
+```java
+connection.setRequestProperty("x-api-key", "YOUR_KEY_HERE");
+```
+
+Every SDK endpoint (`/api/sdk/init`, `/api/sdk/verify-pin`, `/api/sdk/ads`, etc.) requires this header. Requests without a valid, active key receive a `401 Unauthorized` response.
+
+## Enabling and disabling a key
+
+Use the **Enable** / **Disable** toggle button next to any key in the table. This sends a `PATCH /api/admin/keys/:id` request with `{ "isActive": true/false }`.
+
+Disabling a key does **not** delete any data. All ads, PIN records, impressions, and clicks remain intact and can be restored by re-enabling the key.
+
+<Info>
+  Disabling a key immediately blocks all SDK traffic for that app. Use this to suspend an app without permanent data loss.
+</Info>
+
+## Deleting a key
+
+Click **Delete** on the key row and confirm the prompt. This sends `DELETE /api/admin/keys/:id`.
+
+<Warning>
+  Deleting an API key is permanent and cascades to all related data: ads, PIN configuration, user PINs, impressions, and clicks. This data cannot be recovered.
+</Warning>
+
+## API reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/admin/keys` | List all API keys |
+| `POST` | `/api/admin/keys` | Create a new key (`appName` required, `packageName` optional) |
+| `PATCH` | `/api/admin/keys/:id` | Update `appName`, `packageName`, or `isActive` |
+| `DELETE` | `/api/admin/keys/:id` | Delete a key and all its related data |
