@@ -1,0 +1,129 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "AdVerify SDK",
+  "projectDescription": "An Android SDK for ad monetization and device PIN verification, with a companion Express.js backend API and Next.js admin dashboard.",
+  "theme": "sequoia",
+  "primaryColor": "#3b82f6",
+  "lightColor": "#eff6ff",
+  "darkColor": "#1e3a5f",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Android SDK",
+            "pages": [
+              "sdk/installation",
+              "sdk/android-studio",
+              "sdk/mt-manager",
+              "sdk/callback",
+              "sdk/dialogs"
+            ]
+          },
+          {
+            "group": "Backend Server",
+            "pages": [
+              "server/setup",
+              "server/configuration",
+              "server/database"
+            ]
+          },
+          {
+            "group": "Admin Panel",
+            "pages": [
+              "admin/overview",
+              "admin/api-keys",
+              "admin/ads",
+              "admin/pin-config",
+              "admin/user-pins"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/pin-verification-flow",
+              "guides/ad-serving",
+              "guides/pin-expiry",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "SDK Endpoints",
+            "pages": [
+              "api-reference/sdk/init",
+              "api-reference/sdk/verify-pin",
+              "api-reference/sdk/create-link",
+              "api-reference/sdk/generate-pin",
+              "api-reference/sdk/ads",
+              "api-reference/sdk/impression",
+              "api-reference/sdk/click"
+            ]
+          },
+          {
+            "group": "Admin Endpoints",
+            "pages": [
+              "api-reference/admin/auth",
+              "api-reference/admin/stats",
+              "api-reference/admin/keys",
+              "api-reference/admin/ads",
+              "api-reference/admin/pin-config",
+              "api-reference/admin/user-pins",
+              "api-reference/admin/settings"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "PIN-gated app access with configurable expiry (never or duration-based)",
+    "Interstitial ad serving with image loading via HttpURLConnection (zero dependencies)",
+    "Device-bound PIN verification using Android ID",
+    "MT Manager / smali injection support for patched APK use cases",
+    "Express.js backend with Prisma ORM and PostgreSQL for impression/click tracking",
+    "Next.js admin panel for managing API keys, ads, PIN configuration, and user devices",
+    "Programmatic UI with Canvas-drawn icons — no external UI libraries required",
+    "Community links dialog (Telegram channels/groups) with JoinDialog"
+  ],
+  "publicApiSurface": [
+    "AdVerify.init(Context, String apiKey, String baseUrl)",
+    "AdVerify.show(Activity)",
+    "AdVerify.show(Activity, AdVerifyCallback)",
+    "AdVerify.start(Activity)",
+    "AdVerify.start(Activity, String apiKey, String baseUrl)",
+    "AdVerifyCallback.onAdShown()",
+    "AdVerifyCallback.onAdClosed()",
+    "AdVerifyCallback.onAdClicked(String redirectUrl)",
+    "AdVerifyCallback.onError(String message)",
+    "POST /api/sdk/init",
+    "POST /api/sdk/verify-pin",
+    "POST /api/sdk/create-link",
+    "POST /api/sdk/generate-pin",
+    "GET /api/sdk/ads",
+    "POST /api/sdk/impression",
+    "POST /api/sdk/click",
+    "GET /api/admin/stats",
+    "GET /api/admin/keys",
+    "POST /api/admin/keys",
+    "GET /api/admin/ads",
+    "POST /api/admin/ads",
+    "GET /api/admin/pin-config",
+    "POST /api/admin/pin-config",
+    "GET /api/admin/user-pins",
+    "POST /api/admin/settings"
+  ]
+}
